@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ReMind on Lucid</title>
+<style>
+  :root {
+    --bg: #0d0f12; --panel: #15181d; --line: #262b33; --text: #e6e8eb; --dim: #8a929e;
+    --accent: #f2a541; --accent-dim: #6b4a1d; --ok: #57c48f; --bad: #e5675b; --field: #0f1216;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 -apple-system, "Helvetica Neue", sans-serif; }
+  header { display: flex; align-items: baseline; gap: 14px; padding: 14px 22px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  header .sub { color: var(--dim); font-size: 12.5px; }
+  header .device { margin-left: auto; color: var(--dim); font-family: var(--mono); font-size: 12px; }
+  nav { display: flex; gap: 4px; padding: 0 22px; border-bottom: 1px solid var(--line); }
+  nav button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--dim); padding: 10px 14px; font: inherit; cursor: pointer; }
+  nav button.on { color: var(--text); border-bottom-color: var(--accent); }
+  nav .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--bad); margin-left: 6px; }
+  nav .dot.ok { background: var(--ok); }
+  main { padding: 18px 22px; max-width: 1560px; margin: 0 auto; }
+  .tab { display: none; } .tab.on { display: block; }
+  .cols { display: grid; grid-template-columns: 380px 1fr; gap: 18px; }
+  @media (max-width: 980px) { .cols { grid-template-columns: 1fr; } }
+  section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+  .field { margin-bottom: 13px; }
+  .field > label, .label { display: block; font-size: 11.5px; text-transform: uppercase; letter-spacing: .7px; color: var(--dim); margin-bottom: 6px; }
+  select, textarea, input[type=number], input[type=text] { width: 100%; background: var(--field); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 8px 9px; font: inherit; }
+  textarea { min-height: 120px; resize: vertical; font-size: 13px; }
+  textarea.small { min-height: 58px; font-size: 12px; }
+  .row { display: flex; gap: 8px; } .row > * { flex: 1; min-width: 0; }
+  .hint { color: var(--dim); font-size: 12px; margin-top: 5px; }
+  .drop { border: 1px dashed #39404a; border-radius: 8px; height: 150px; display: grid; place-items: center; cursor: pointer; overflow: hidden; background: var(--field); }
+  .drop img, .drop video { width: 100%; height: 100%; object-fit: cover; }
+  .drop span { color: var(--dim); font-size: 12.5px; text-align: center; padding: 0 12px; }
+  button.primary { padding: 11px; border: 0; border-radius: 8px; background: var(--accent); color: #1b1305; font-weight: 700; font-size: 14.5px; cursor: pointer; }
+  button.primary:disabled { background: var(--accent-dim); color: #3a2a12; cursor: default; }
+  button.ghost { padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--text); cursor: pointer; font: inherit; }
+  button.ghost:disabled { color: var(--dim); cursor: default; }
+  button.ghost.sm { padding: 4px 9px; font-size: 12px; }
+  .stage { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .screen { position: relative; aspect-ratio: 832 / 480; background: #050607; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .screen canvas, .screen video { width: 100%; height: 100%; display: block; }
+  .screen .overlay { position: absolute; inset: 0; display: grid; place-items: center; color: var(--dim); font-size: 13px; pointer-events: none; text-align: center; padding: 20px; }
+  .badge { position: absolute; top: 10px; left: 10px; font-family: var(--mono); font-size: 11.5px; background: rgba(0,0,0,.55); padding: 3px 8px; border-radius: 5px; }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; font-family: var(--mono); font-size: 12.5px; color: var(--dim); }
+  .stats b { color: var(--text); font-weight: 600; }
+  .status { font-size: 13px; color: var(--dim); min-height: 19px; } .status.err { color: var(--bad); }
+  .schedule { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+  .chunk { border: 1px solid var(--line); border-radius: 7px; padding: 6px 7px; font-size: 11.5px; background: var(--field); min-height: 46px; cursor: default; overflow: hidden; }
+  .chunk b { display: block; font-family: var(--mono); font-size: 11px; color: var(--dim); font-weight: 500; }
+  .chunk.now { border-color: var(--accent); } .chunk.done { border-color: #2f5f49; }
+  .chunk.known { opacity: .65; }
+  .ph-enter { color: #f2a541; } .ph-hold { color: #e5675b; } .ph-exit { color: #6fb7e9; } .ph-recover { color: #57c48f; } .ph-none { color: var(--dim); }
+  pre { background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow: auto; font: 12px/1.45 var(--mono); max-height: 320px; margin: 0; white-space: pre-wrap; word-break: break-word; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { text-align: left; padding: 6px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--dim); font-weight: 500; font-size: 11.5px; text-transform: uppercase; letter-spacing: .6px; }
+  td.mono, .mono { font-family: var(--mono); font-size: 12px; }
+  .bar { height: 6px; background: var(--field); border-radius: 3px; overflow: hidden; min-width: 120px; }
+  .bar i { display: block; height: 100%; background: var(--accent); }
+  .st-verified { color: var(--ok); } .st-missing { color: var(--bad); } .st-partial, .st-unverified { color: var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; cursor: pointer; position: relative; }
+  .card.sel { border-color: var(--accent); }
+  .card img { width: 100%; aspect-ratio: 832 / 480; object-fit: cover; display: block; background: #050607; }
+  .card .meta { padding: 8px 10px; font-size: 12px; }
+  .card .meta b { display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .meta span { color: var(--dim); font-family: var(--mono); font-size: 11px; }
+  .card .pick { position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; border-radius: 5px; border: 1px solid #555; background: rgba(0,0,0,.5); display: grid; place-items: center; font-size: 12px; color: var(--accent); }
+  .compare { display: grid; gap: 10px; }
+  .compare.n1 { grid-template-columns: 1fr; } .compare.n2 { grid-template-columns: 1fr 1fr; }
+  .compare.n3 { grid-template-columns: repeat(3, 1fr); } .compare.n4 { grid-template-columns: 1fr 1fr; }
+  .compare figure { margin: 0; } .compare video, .compare img.heat { width: 100%; border-radius: 8px; border: 1px solid var(--line); background: #050607; display: block; }
+  .compare figcaption { font-size: 12px; color: var(--dim); margin-top: 4px; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .toolbar input[type=range] { flex: 1; min-width: 160px; }
+  .diff td.d { color: var(--accent); }
+  details { margin-bottom: 13px; } summary { cursor: pointer; color: var(--dim); font-size: 12.5px; }
+  h3 { font-size: 13px; margin: 0 0 10px; font-weight: 600; }
+  canvas.heat { width: 100%; image-rendering: pixelated; border: 1px solid var(--line); border-radius: 8px; background: var(--field); }
+  footer { padding: 18px 22px 30px; color: var(--dim); font-size: 12px; border-top: 1px solid var(--line); margin-top: 24px; }
+  footer a, a.link { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>ReMind on Lucid</h1>
+  <span class="sub">Out-of-sight dynamic memory for causal video generation — ReMind-5B + DMD EMA, 81 frames at 832×480, four steps per chunk</span>
+  <span class="device" id="device"></span>
+</header>
+<nav>
+  <button data-tab="generate" class="on">Generate</button>
+  <button data-tab="gallery">Gallery</button>
+  <button data-tab="probes">Probes</button>
+  <button data-tab="weights">Weights <span class="dot" id="wdot"></span></button>
+</nav>
+<main>
+
+<!-- ===================================================== Generate -->
+<div class="tab on" id="tab-generate">
+  <div class="cols">
+    <section class="panel">
+      <div class="field"><label>Preset</label>
+        <select id="preset"></select>
+        <div class="hint" id="preset-hint"></div>
+      </div>
+      <div class="field"><label>Input — first image (I2V) or a video whose first 21 frames seed the run (V2V)</label>
+        <div class="drop" id="drop"><span>Drop an image or video, or click to choose</span></div>
+        <input type="file" id="file" accept="image/*,video/mp4,video/quicktime" hidden>
+        <div class="hint" id="input-hint"></div>
+      </div>
+      <div class="field"><label>Caption — scene dynamics only; no camera or occluder words</label>
+        <textarea id="prompt"></textarea>
+      </div>
+      <div class="row">
+        <div class="field"><label>Control</label>
+          <select id="kind"><option value="clean">clean</option><option value="camera">camera</option><option value="occluder">occluder</option><option value="light">light off / on</option></select>
+        </div>
+        <div class="field"><label>Seed</label><input type="number" id="seed"></div>
+      </div>
+      <div class="field" id="traj-field"><label>Camera trajectory</label>
+        <select id="trajectory"></select>
+        <div class="hint" id="traj-hint"></div>
+      </div>
+      <div id="event-fields">
+        <div class="field"><label>Visibility per chunk (3 latent frames = 12 video frames = 0.75 s)</label>
+          <div class="schedule" id="phases"></div>
+          <div class="hint">The interruption is told to the model only through each chunk's text.</div>
+        </div>
+        <div class="row" id="occ-fields">
+          <div class="field"><label>Occluder</label><input type="text" id="occ-label" value="brown cardboard box"></div>
+          <div class="field"><label>Enters from</label><select id="occ-enter"><option>right</option><option>left</option><option>top</option><option>bottom</option></select></div>
+          <div class="field"><label>Exits to</label><select id="occ-exit"><option>left</option><option>right</option><option>top</option><option>bottom</option></select></div>
+        </div>
+      </div>
+      <details id="custom-prompts"><summary>Edit the seven chunk prompts directly</summary>
+        <div class="hint" style="margin:6px 0">Filled from the last validation. If any box is non-empty, all seven are used verbatim.</div>
+        <div id="prompt-boxes"></div>
+        <button class="ghost sm" id="clear-prompts">Clear</button>
+      </details>
+      <div class="row">
+        <button class="ghost" id="validate">Validate</button>
+        <button class="primary" id="go">Generate</button>
+      </div>
+      <button class="ghost" id="stop" style="width:100%;margin-top:8px" disabled>Stop</button>
+    </section>
+    <div class="stage">
+      <div class="screen">
+        <canvas id="canvas" width="832" height="480"></canvas>
+        <div class="overlay" id="overlay">Pick a preset and press Generate. Frames appear chunk by chunk.</div>
+        <div class="badge" id="badge" hidden></div>
+      </div>
+      <div class="status" id="status"></div>
+      <div class="stats" id="stats"></div>
+      <section class="panel">
+        <h3>Chunk schedule</h3>
+        <div class="schedule" id="schedule"></div>
+        <div class="hint" id="schedule-text" style="margin-top:8px"></div>
+      </section>
+      <section class="panel" id="validate-panel" hidden>
+        <h3>Validation (upstream <span class="mono">--dry-run</span>)</h3>
+        <pre id="validate-out"></pre>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- ===================================================== Gallery -->
+<div class="tab" id="tab-gallery">
+  <div class="toolbar">
+    <button class="ghost" id="g-compare" disabled>Compare selected</button>
+    <button class="ghost" id="g-dup" disabled>Duplicate &amp; edit</button>
+    <button class="ghost" id="g-delete" disabled>Delete</button>
+    <span class="hint" id="g-hint">Click cards to select up to four runs.</span>
+  </div>
+  <section class="panel" id="compare-panel" hidden style="margin-bottom:14px">
+    <div class="toolbar">
+      <button class="ghost" id="c-play">Play</button>
+      <input type="range" id="c-seek" min="0" max="80" value="0" step="1">
+      <span class="mono" id="c-frame">frame 0</span>
+      <label class="hint"><input type="checkbox" id="c-loop" checked> loop</label>
+      <button class="ghost sm" id="c-close">Close</button>
+    </div>
+    <div class="compare" id="compare"></div>
+    <h3 style="margin-top:14px">Metadata — rows that differ are highlighted</h3>
+    <div style="overflow:auto"><table class="diff" id="diff"></table></div>
+    <div id="heat-wrap"></div>
+  </section>
+  <div class="grid" id="gallery"></div>
+</div>
+
+<!-- ===================================================== Probes -->
+<div class="tab" id="tab-probes">
+  <div class="cols">
+    <section class="panel">
+      <p class="hint" style="margin-top:0">A probe run starts from the settings of the <b>Generate</b> tab (preset, input, caption, control, seed) and varies one thing. Without a probe the generator takes exactly the reference path.</p>
+      <div class="field"><label>Sweep</label>
+        <select id="p-kind">
+          <option value="interruption">Interruption duration — how long the scene is out of sight</option>
+          <option value="seed">Seeds</option>
+          <option value="gap">RoPE gap — shift later chunks in time</option>
+          <option value="knockout">Anchor knockout — hide cached chunks</option>
+          <option value="single">Single run with the hooks below</option>
+        </select>
+      </div>
+      <div class="field" data-for="interruption"><label>Hidden chunks (−1 = no interruption)</label><input type="text" id="p-holds" value="-1, 0, 1, 2"></div>
+      <div class="row" data-for="interruption">
+        <div class="field"><label>Starts at chunk</label><input type="number" id="p-start" value="2" min="1" max="5"></div>
+        <div class="field"><label>Event</label><select id="p-event"><option value="occluder">occluder</option><option value="light">light off / on</option></select></div>
+      </div>
+      <div class="field" data-for="seed"><label>Seeds</label><input type="text" id="p-seeds" value="1, 2, 3, 4"></div>
+      <div class="field" data-for="gap"><label>Gaps, in latent frames (4 video frames each)</label><input type="text" id="p-gaps" value="0, 8, 32, 128"></div>
+      <div class="field" data-for="gap"><label>Shift chunks from</label><input type="number" id="p-gap-from" value="3" min="1" max="6"></div>
+      <div class="field" data-for="knockout"><label>Chunk sets to hide, one set per run ("-" = none)</label><input type="text" id="p-sets" value="-; 0; 1; 2; 0,1,2"></div>
+      <div class="field" data-for="knockout"><label>Hide from chunk</label><input type="number" id="p-at" value="5" min="1" max="6"></div>
+      <h3 style="margin-top:6px">Hooks applied to every run of the sweep</h3>
+      <div class="field"><label>Log attention mass at blocks (0–29; empty = off)</label><input type="text" id="p-layers" value="0, 7, 14, 21, 29"></div>
+      <div class="field"><label>Replace cached chunks after commit (e.g. <span class="mono">1:noise, 2:chunk:0</span>)</label><input type="text" id="p-replace" placeholder="chunk:mode — noise | zeros | chunk:k"></div>
+      <button class="primary" id="p-run" style="width:100%">Run probe</button>
+      <div class="status" id="p-status" style="margin-top:8px"></div>
+    </section>
+    <div class="stage">
+      <section class="panel">
+        <h3>Batch results <span class="hint" id="p-batch"></span></h3>
+        <div class="toolbar">
+          <button class="ghost" id="b-play">Play all</button>
+          <select id="b-select" style="max-width:320px"></select>
+        </div>
+        <div class="compare n2" id="batch"></div>
+      </section>
+      <section class="panel">
+        <h3>Attention mass — softmax mass of each generated chunk on each cached chunk</h3>
+        <div class="hint">Rows: logged blocks (top = first). Columns: key chunks, the last column being the chunk's own tokens. Averaged over heads, queries and the four denoising steps.</div>
+        <div id="heat"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- ===================================================== Weights -->
+<div class="tab" id="tab-weights">
+  <section class="panel">
+    <div class="toolbar">
+      <button class="primary" id="w-download">Download / resume</button>
+      <span class="hint" id="w-summary"></span>
+    </div>
+    <table id="w-table"></table>
+    <div class="status" id="w-status" style="margin-top:10px"></div>
+    <p class="hint">The two ReMind files are checked against the release's SHA256SUMS. The UMT5 encoder and the Wan2.2 VAE are read from their <span class="mono">torch.save</span> archives remotely, tensor by tensor, without unpickling code. None of the 20 GB Wan2.2 DiT shards is needed: the ReMind generator supplies every tensor.</p>
+  </section>
+</div>
+</main>
+<footer>
+  ReMind is by Applied Intuition and UC Berkeley (<a href="https://arxiv.org/abs/2605.25333">arXiv 2605.25333</a>,
+  <a href="https://github.com/Applied-Intuition-Open-Source/ReMind">code</a>,
+  <a href="https://huggingface.co/AppliedIntuitionResearch/ReMind">weights</a>).
+  This port and the ReMind weights are licensed <b>CC BY-NC 4.0 — non-commercial use only</b>. No weights are redistributed; they are downloaded from the authors' repositories.
+  Runs on <a href="https://github.com/lucid-official/lucid">Lucid</a> <span id="lucid-version"></span>.
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const api = async (path, body) => {
+  const r = await fetch(path, body ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : undefined);
+  return r.json();
+};
+const nums = text => text.split(/[,\s]+/).filter(s => s !== '').map(Number).filter(n => !Number.isNaN(n));
+let info = null, upload = null, uploadKind = null, activeJob = null, frames = [], playing = null;
+let chunkState = {prompts: [], phases: [], current: -1, done: -1, known: 0};
+
+// ---------------------------------------------------------------- tabs
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.id === 'tab-' + b.dataset.tab));
+  if (b.dataset.tab === 'gallery') loadGallery();
+  if (b.dataset.tab === 'weights') loadWeights();
+  if (b.dataset.tab === 'probes') loadBatches();
+});
+
+// ---------------------------------------------------------------- generate form
+function presetByKey(key) { return info.presets.find(p => p.key === key); }
+
+function renderPhases(phases) {
+  const box = $('phases'); box.innerHTML = '';
+  for (let i = 0; i < 7; i++) {
+    const cell = document.createElement('div'); cell.className = 'chunk';
+    const sel = document.createElement('select'); sel.style.padding = '3px'; sel.style.fontSize = '11.5px';
+    for (const p of ['none', 'enter', 'hold', 'exit', 'recover']) sel.add(new Option(p, p));
+    sel.value = (phases && phases[i] && phases[i] !== 'custom') ? phases[i] : 'none';
+    cell.innerHTML = `<b>chunk ${i}</b>`; cell.appendChild(sel); box.appendChild(cell);
+  }
+}
+const readPhases = () => [...$('phases').querySelectorAll('select')].map(s => s.value);
+
+function renderSchedule() {
+  const box = $('schedule'); box.innerHTML = '';
+  chunkState.prompts.forEach((text, i) => {
+    const phase = chunkState.phases[i] || 'none';
+    const cell = document.createElement('div');
+    cell.className = 'chunk' + (i === chunkState.current ? ' now' : '') + (i <= chunkState.done ? ' done' : '') + (i < chunkState.known ? ' known' : '');
+    cell.title = text;
+    cell.innerHTML = `<b>chunk ${i} · f${i * 12 ? i * 12 - 3 : 0}–${i * 12 + 8}</b><span class="ph-${phase}">${i < chunkState.known ? 'input' : phase === 'none' ? 'caption' : phase}</span>`;
+    cell.onmouseenter = () => $('schedule-text').textContent = text;
+    box.appendChild(cell);
+  });
+}
+
+function syncKind() {
+  const kind = $('kind').value;
+  $('traj-field').hidden = kind !== 'camera';
+  $('event-fields').hidden = !(kind === 'occluder' || kind === 'light');
+  $('occ-fields').style.display = kind === 'occluder' ? 'flex' : 'none';
+}
+
+function showInput(url, isVideo) {
+  $('drop').innerHTML = isVideo ? `<video src="${url}" muted loop autoplay playsinline></video>` : `<img src="${url}">`;
+}
+
+function applyPreset(key) {
+  const p = presetByKey(key);
+  upload = null; uploadKind = null;
+  $('prompt').value = p.prompt; $('seed').value = p.seed; $('kind').value = p.kind;
+  showInput(p.input, p.task === 'v2v');
+  $('input-hint').textContent = p.task === 'v2v' ? `V2V: 21 prefix frames → ${p.seed_latent_frames} known latent frames (chunks 0–1)` : 'I2V: one known latent frame';
+  $('preset-hint').textContent = `${p.task.toUpperCase()} · ${p.kind}`;
+  const traj = $('trajectory'); traj.value = '__preset__';
+  if (p.control.params) { $('occ-enter').value = p.control.params.enter_side || 'right'; $('occ-exit').value = p.control.params.exit_side || 'left'; }
+  if (p.control.meta && p.control.meta.label) $('occ-label').value = p.control.meta.label;
+  renderPhases(p.phases || ['none', 'none', 'enter', 'hold', 'exit', 'recover', 'recover']);
+  chunkState = {prompts: p.prompts, phases: p.phases || [], current: -1, done: -1, known: Math.ceil(p.seed_latent_frames / 3) * (p.task === 'v2v' ? 1 : 0)};
+  renderSchedule(); syncKind(); clearPromptBoxes();
+}
+
+function clearPromptBoxes() { $('prompt-boxes').querySelectorAll('textarea').forEach(t => t.value = ''); }
+
+function spec() {
+  const key = $('preset').value, p = presetByKey(key), kind = $('kind').value;
+  const s = {preset: key, prompt: $('prompt').value.trim(), seed: Number($('seed').value)};
+  if (upload) { s[uploadKind] = upload; s.name = 'custom'; }
+  const samePreset = kind === p.kind && !upload;
+  if (kind === 'clean') s.control = {kind: 'clean'};
+  else if (kind === 'camera') {
+    const t = $('trajectory').value;
+    s.control = (t === '__preset__' && p.control.trajectory) ? p.control : t === '__analytic__' ? {kind: 'camera'} : {kind: 'camera', trajectory: t === '__preset__' ? info.trajectories[0].file.replace('.npz', '') : t};
+  } else {
+    const phases = readPhases();
+    const keep = samePreset && p.phases && JSON.stringify(p.phases) === JSON.stringify(phases)
+      && (p.control.meta || {}).label === $('occ-label').value && (p.control.params || {}).enter_side === $('occ-enter').value && (p.control.params || {}).exit_side === $('occ-exit').value;
+    if (keep) s.control = p.control;
+    else {
+      const base = (samePreset && p.control.meta && p.control.meta.label === $('occ-label').value) ? p.control : {};
+      s.control = {kind, params: {...(base.params || {}), enter_side: $('occ-enter').value, exit_side: $('occ-exit').value}, meta: base.meta || {label: $('occ-label').value}};
+      s.phases = phases;
+    }
+  }
+  const custom = [...$('prompt-boxes').querySelectorAll('textarea')].map(t => t.value.trim());
+  if (custom.some(Boolean)) s.prompts = custom.map(t => t || s.prompt);
+  return s;
+}
+
+async function validate(show) {
+  const r = await api('/api/validate', spec());
+  if (!r.ok) { setStatus(r.error, true); return null; }
+  const sum = r.summary;
+  chunkState = {prompts: sum.prompt_schedule, phases: sum.phases, current: -1, done: -1, known: sum.task === 'v2v' ? Math.ceil(sum.seed_latent_frames / 3) : 0};
+  renderSchedule();
+  if (show) {
+    $('validate-panel').hidden = false; $('validate-out').textContent = JSON.stringify(sum, null, 2);
+    const boxes = $('prompt-boxes').querySelectorAll('textarea');
+    if (![...boxes].some(t => t.value.trim())) sum.prompt_schedule.forEach((t, i) => boxes[i].dataset.suggest = t);
+    setStatus(`valid: ${sum.latent_frames} latent frames, ${sum.prompt_schedule.length} chunk prompts, control "${sum.control_kind}", max camera angle ${sum.camera.max_angle_deg.toFixed(1)}°`);
+  }
+  return sum;
+}
+
+function setStatus(text, err) { const s = $('status'); s.textContent = text; s.classList.toggle('err', !!err); }
+
+// ---------------------------------------------------------------- live playback
+const ctx = $('canvas').getContext('2d');
+function startPlayback() {
+  if (playing) clearInterval(playing);
+  let shown = 0;
+  playing = setInterval(() => {
+    if (shown < frames.length) { const img = frames[shown]; if (img.complete) { ctx.drawImage(img, 0, 0, 832, 480); shown++; $('badge').textContent = `frame ${shown} / 81`; } }
+    else if (!activeJob && frames.length) shown = 0;  // loop the finished clip
+  }, 1000 / 16);
+}
+
+function listen(job) {
+  const es = new EventSource('/api/events?job=' + job);
+  const t0 = performance.now();
+  es.onmessage = ev => {
+    const e = JSON.parse(ev.data);
+    if (e.type === 'status') setStatus(e.message);
+    else if (e.type === 'start') {
+      frames = []; $('overlay').hidden = true; $('badge').hidden = false; startPlayback();
+      chunkState.prompts = e.prompts; chunkState.current = 0; renderSchedule(); setStatus('generating …');
+    } else if (e.type === 'frames') {
+      for (const b64 of e.images) { const img = new Image(); img.src = 'data:image/jpeg;base64,' + b64; frames.push(img); }
+      chunkState.done = e.chunk; chunkState.current = e.chunk + 1; renderSchedule();
+      $('stats').innerHTML = `<span>chunk <b>${e.chunk + 1}/7</b></span><span><b>${e.seconds}s</b> this chunk</span><span>history <b>${e.kv_tokens}</b> tokens</span><span>memory <b>${e.memory_gb} GB</b></span><span>elapsed <b>${((performance.now() - t0) / 1000).toFixed(0)}s</b></span>`;
+    } else if (e.type === 'done') {
+      const m = e.metadata;
+      setStatus(`done: ${e.frames} frames in ${m.timings.total}s, peak ${m.memory_gb.peak} GB — saved to the gallery`);
+    } else if (e.type === 'error') setStatus(e.message, true);
+    else if (e.type === 'end') { es.close(); activeJob = null; chunkState.current = -1; renderSchedule(); $('go').disabled = false; $('stop').disabled = true; }
+  };
+}
+
+$('go').onclick = async () => {
+  const r = await api('/api/generate', spec());
+  if (r.error) return setStatus(r.error, true);
+  activeJob = r.jobs[0]; $('go').disabled = true; $('stop').disabled = false; setStatus('queued …');
+  await validate(false); listen(activeJob);
+};
+$('stop').onclick = () => activeJob && api('/api/stop', {job: activeJob});
+$('validate').onclick = () => validate(true);
+$('preset').onchange = e => applyPreset(e.target.value);
+$('kind').onchange = syncKind;
+$('clear-prompts').onclick = clearPromptBoxes;
+$('custom-prompts').ontoggle = () => $('prompt-boxes').querySelectorAll('textarea').forEach(t => { if (!t.value && t.dataset.suggest) t.placeholder = t.dataset.suggest.slice(-140); });
+$('drop').onclick = () => $('file').click();
+$('drop').ondragover = e => e.preventDefault();
+$('drop').ondrop = e => { e.preventDefault(); if (e.dataTransfer.files[0]) takeFile(e.dataTransfer.files[0]); };
+$('file').onchange = e => e.target.files[0] && takeFile(e.target.files[0]);
+function takeFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    upload = reader.result; uploadKind = file.type.startsWith('video') ? 'video' : 'image';
+    showInput(upload, uploadKind === 'video');
+    $('input-hint').textContent = uploadKind === 'video' ? 'custom V2V: the first 21 frames are used (resized to 832×480)' : 'custom I2V (resized to 832×480 with Lanczos)';
+    chunkState.known = uploadKind === 'video' ? 2 : 0; renderSchedule();
+  };
+  reader.readAsDataURL(file);
+}
+
+// ---------------------------------------------------------------- gallery
+let jobs = [], picked = [];
+const fileUrl = (id, name) => `/api/file/${id}/${name}`;
+async function loadGallery() {
+  const r = await api('/api/jobs'); jobs = r.jobs;
+  const box = $('gallery'); box.innerHTML = '';
+  if (!jobs.length) box.innerHTML = '<div class="hint">No runs yet.</div>';
+  for (const j of jobs) {
+    const card = document.createElement('div'); card.className = 'card' + (picked.includes(j.id) ? ' sel' : '');
+    const tag = j.sweep ? ` · ${j.sweep.kind}` : '';
+    card.innerHTML = `<div class="pick">${picked.includes(j.id) ? picked.indexOf(j.id) + 1 : ''}</div><img src="${fileUrl(j.id, 'thumb.jpg')}" loading="lazy">
+      <div class="meta"><b>${j.name}</b><span>${j.task} · ${j.control_kind}${tag} · seed ${j.seed} · ${j.timings.total}s · ${j.created}</span></div>`;
+    card.onclick = () => { picked = picked.includes(j.id) ? picked.filter(x => x !== j.id) : picked.length < 4 ? [...picked, j.id] : picked; syncPicked(); loadGalleryCards(); };
+    box.appendChild(card);
+  }
+  syncPicked();
+}
+const loadGalleryCards = loadGallery;
+function syncPicked() {
+  $('g-compare').disabled = picked.length < 1; $('g-dup').disabled = picked.length !== 1; $('g-delete').disabled = picked.length < 1;
+  $('g-hint').textContent = picked.length ? `${picked.length} selected` : 'Click cards to select up to four runs.';
+}
+function flatten(obj, prefix = '', out = {}) {
+  for (const [k, v] of Object.entries(obj || {})) {
+    if (v && typeof v === 'object' && !Array.isArray(v)) flatten(v, prefix + k + '.', out);
+    else out[prefix + k] = Array.isArray(v) ? JSON.stringify(v) : String(v);
+  }
+  return out;
+}
+function showCompare(ids, target, withDiff) {
+  const runs = ids.map(id => jobs.find(j => j.id === id)).filter(Boolean);
+  target.className = 'compare n' + Math.min(4, runs.length); target.innerHTML = '';
+  for (const j of runs) {
+    const fig = document.createElement('figure');
+    const label = j.sweep ? Object.entries(j.sweep).filter(([k]) => k !== 'kind' && k !== 'phases').map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(' ') : `seed ${j.seed}`;
+    fig.innerHTML = `<video src="${fileUrl(j.id, 'video.mp4')}" muted playsinline preload="auto"></video><figcaption title="${j.name}">${j.name} · ${label}</figcaption>`;
+    target.appendChild(fig);
+  }
+  if (!withDiff) return;
+  const flat = runs.map(j => flatten(j));
+  const skip = /^(id|created|output|preset|timings\.chunks|input_|batch)/;
+  const keys = [...new Set(flat.flatMap(f => Object.keys(f)))].filter(k => !skip.test(k)).sort();
+  let html = '<tr><th>field</th>' + runs.map(j => `<th>${j.name}</th>`).join('') + '</tr>';
+  for (const k of keys) {
+    const vals = flat.map(f => f[k] ?? '—'), differs = new Set(vals).size > 1;
+    if (!differs && runs.length > 1 && !/^(seed|control_kind|task|timings\.total|memory_gb\.peak)$/.test(k)) continue;
+    html += `<tr><td class="mono">${k}</td>` + vals.map(v => `<td class="${differs ? 'd' : ''}">${v.length > 220 ? v.slice(0, 220) + '…' : v}</td>`).join('') + '</tr>';
+  }
+  $('diff').innerHTML = html;
+  $('heat-wrap').innerHTML = runs.filter(j => j.attention_report).map(j => `<h3 style="margin-top:14px">Attention mass — ${j.name} (last chunk)</h3><img class="heat" style="max-width:420px;image-rendering:pixelated" src="${fileUrl(j.id, 'heatmap.png')}">`).join('');
+}
+function syncVideos(container, seek, label, playBtn, loopBox) {
+  const vids = () => [...container.querySelectorAll('video')];
+  let timer = null;
+  const stop = () => { vids().forEach(v => v.pause()); clearInterval(timer); timer = null; playBtn.textContent = 'Play'; };
+  playBtn.onclick = () => {
+    if (timer) return stop();
+    const v = vids(); if (!v.length) return;
+    v.forEach(x => { x.currentTime = v[0].currentTime; x.play(); }); playBtn.textContent = 'Pause';
+    timer = setInterval(() => {
+      const lead = v[0];
+      v.slice(1).forEach(x => { if (Math.abs(x.currentTime - lead.currentTime) > 0.08) x.currentTime = lead.currentTime; });
+      if (seek) { seek.value = Math.round(lead.currentTime * 16); label.textContent = 'frame ' + seek.value; }
+      if (lead.ended) { if (!loopBox || loopBox.checked) v.forEach(x => { x.currentTime = 0; x.play(); }); else stop(); }
+    }, 60);
+  };
+  if (seek) seek.oninput = () => { vids().forEach(v => v.currentTime = seek.value / 16); label.textContent = 'frame ' + seek.value; };
+  return stop;
+}
+let stopCompare = () => {};
+$('g-compare').onclick = () => { $('compare-panel').hidden = false; showCompare(picked, $('compare'), true); stopCompare(); stopCompare = syncVideos($('compare'), $('c-seek'), $('c-frame'), $('c-play'), $('c-loop')); $('compare-panel').scrollIntoView({behavior: 'smooth'}); };
+$('c-close').onclick = () => { stopCompare(); $('compare-panel').hidden = true; };
+$('g-delete').onclick = async () => { if (!confirm(`Delete ${picked.length} run(s)?`)) return; for (const id of picked) await api('/api/delete', {job: id}); picked = []; loadGallery(); };
+$('g-dup').onclick = () => {
+  const j = jobs.find(x => x.id === picked[0]); if (!j) return;
+  const preset = info.presets.find(p => p.name === j.name) || info.presets.find(p => j.name.startsWith(p.name)) || info.presets[4];
+  $('preset').value = preset.key; applyPreset(preset.key);
+  $('seed').value = j.seed; $('kind').value = j.control_kind; syncKind();
+  const boxes = $('prompt-boxes').querySelectorAll('textarea');
+  if (JSON.stringify(j.prompt_schedule) !== JSON.stringify(preset.prompts)) { j.prompt_schedule.forEach((t, i) => boxes[i].value = t); $('custom-prompts').open = true; }
+  const src = j.input_image || j.input_video;
+  if (src && !src.includes('/presets/assets/')) { upload = src; uploadKind = j.input_video ? 'video' : 'image'; $('input-hint').textContent = 'input reused from the duplicated run'; }
+  document.querySelector('nav button[data-tab=generate]').click();
+  setStatus(`duplicated "${j.name}" — edit and generate`);
+};
+
+// ---------------------------------------------------------------- probes
+function syncProbeFields() { const k = $('p-kind').value; document.querySelectorAll('#tab-probes [data-for]').forEach(el => el.hidden = el.dataset.for !== k); }
+$('p-kind').onchange = syncProbeFields;
+function probeConfig() {
+  const cfg = {}; const layers = nums($('p-layers').value).filter(n => n >= 0 && n < 30);
+  if (layers.length) cfg.attention_layers = layers;
+  const rep = {}; $('p-replace').value.split(',').map(s => s.trim()).filter(Boolean).forEach(s => { const i = s.indexOf(':'); if (i > 0) rep[s.slice(0, i).trim()] = s.slice(i + 1).trim(); });
+  if (Object.keys(rep).length) cfg.replace = rep;
+  return cfg;
+}
+$('p-run').onclick = async () => {
+  const body = spec(), kind = $('p-kind').value;
+  body.probes = probeConfig();
+  if (kind === 'interruption') body.sweep = {kind, hold_chunks: nums($('p-holds').value), start_chunk: Number($('p-start').value), event: $('p-event').value};
+  else if (kind === 'seed') body.sweep = {kind, seeds: nums($('p-seeds').value)};
+  else if (kind === 'gap') body.sweep = {kind, gaps: nums($('p-gaps').value), from_chunk: Number($('p-gap-from').value)};
+  else if (kind === 'knockout') body.sweep = {kind, at_chunk: Number($('p-at').value), sets: $('p-sets').value.split(';').map(s => s.trim() === '-' ? [] : nums(s))};
+  const r = await api(kind === 'single' ? '/api/generate' : '/api/batch', body);
+  if (r.error) { $('p-status').textContent = r.error; $('p-status').classList.add('err'); return; }
+  $('p-status').classList.remove('err');
+  const total = r.jobs.length; let done = 0;
+  $('p-status').textContent = `queued ${total} run(s) …`;
+  for (const id of r.jobs) {
+    const es = new EventSource('/api/events?job=' + id);
+    es.onmessage = ev => {
+      const e = JSON.parse(ev.data);
+      if (e.type === 'frames') $('p-status').textContent = `run ${done + 1}/${total}: chunk ${e.chunk + 1}/7 (${e.seconds}s)`;
+      if (e.type === 'error') $('p-status').textContent = e.message;
+      if (e.type === 'end') { es.close(); done++; $('p-status').textContent = done === total ? `finished ${total} run(s)` : `finished ${done}/${total} …`; loadBatches(r.batch || id); }
+    };
+  }
+};
+let stopBatch = () => {};
+async function loadBatches(prefer) {
+  const r = await api('/api/jobs'); jobs = r.jobs;
+  const groups = new Map();
+  for (const j of jobs) { const key = j.batch || (j.probes ? j.id : null); if (!key) continue; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(j); }
+  const sel = $('b-select'), keep = prefer || sel.value; sel.innerHTML = '';
+  for (const [key, runs] of groups) sel.add(new Option(`${runs[0].created} · ${(runs[0].sweep || {kind: 'single'}).kind} · ${runs.length} run(s)`, key));
+  if (keep && groups.has(keep)) sel.value = keep;
+  sel.onchange = () => showBatch(groups.get(sel.value) || []);
+  showBatch(groups.get(sel.value) || []);
+}
+function showBatch(runs) {
+  runs = [...runs].reverse();
+  $('p-batch').textContent = runs.length ? `— ${runs.length} run(s)` : '— none yet';
+  jobs = jobs.length ? jobs : runs;
+  showCompare(runs.map(r => r.id), $('batch'), false);
+  $('batch').className = 'compare n' + (runs.length <= 1 ? 1 : runs.length === 3 ? 3 : 2);
+  stopBatch(); stopBatch = syncVideos($('batch'), null, null, $('b-play'), null);
+  const heat = $('heat'); heat.innerHTML = '';
+  runs.filter(r => r.attention_report).forEach(async run => {
+    const rep = await api(fileUrl(run.id, 'probes.json'));
+    const wrap = document.createElement('div'); wrap.style.marginTop = '12px';
+    wrap.innerHTML = `<div class="label">${run.name}</div>`;
+    const row = document.createElement('div'); row.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px';
+    for (const chunk of Object.keys(rep.attention_mass).sort((a, b) => a - b)) row.appendChild(heatCanvas(rep, chunk));
+    wrap.appendChild(row); heat.appendChild(wrap);
+  });
+}
+const RAMP = [[13, 8, 135], [84, 2, 163], [185, 50, 137], [240, 124, 79], [240, 249, 33]];
+function ramp(v) { v = Math.max(0, Math.min(1, v)) * 4; const i = Math.min(3, Math.floor(v)), t = v - i; return RAMP[i].map((a, c) => Math.round(a + (RAMP[i + 1][c] - a) * t)); }
+function heatCanvas(rep, chunk) {
+  const layers = Object.keys(rep.attention_mass[chunk]).sort((a, b) => a - b), keys = rep.attention_keys[chunk];
+  const rows = layers.map(l => keys.map((_, c) => rep.attention_mass[chunk][l].reduce((s, h) => s + h[c], 0) / rep.attention_mass[chunk][l].length));
+  const top = Math.max(...rows.flat());
+  const fig = document.createElement('figure'); fig.style.margin = 0;
+  const cv = document.createElement('canvas'); cv.className = 'heat'; cv.width = keys.length; cv.height = layers.length;
+  const c2 = cv.getContext('2d'), img = c2.createImageData(keys.length, layers.length);
+  rows.forEach((r, y) => r.forEach((v, x) => { const [R, G, B] = ramp(v / top); img.data.set([R, G, B, 255], (y * keys.length + x) * 4); }));
+  c2.putImageData(img, 0, 0);
+  cv.title = rows.map((r, y) => `block ${layers[y]}: ` + r.map((v, x) => `c${keys[x]}=${v.toFixed(3)}`).join(' ')).join('\n');
+  fig.appendChild(cv);
+  const cap = document.createElement('figcaption'); cap.className = 'hint'; cap.textContent = `chunk ${chunk} → keys ${keys.join(', ')} (max ${top.toFixed(3)})`;
+  fig.appendChild(cap); return fig;
+}
+
+// ---------------------------------------------------------------- weights
+let weightTimer = null;
+async function loadWeights() {
+  const r = await api('/api/weights');
+  $('wdot').classList.toggle('ok', r.ready);
+  let total = 0, have = 0;
+  let html = '<tr><th>file</th><th>status</th><th>size</th><th></th><th>source</th></tr>';
+  for (const f of r.files) {
+    total += f.size; have += Math.min(f.have, f.size);
+    html += `<tr><td>${f.label}</td><td class="st-${f.state}">${f.state}</td><td class="mono">${(f.have / 1e9).toFixed(2)} / ${(f.size / 1e9).toFixed(2)} GB</td>
+      <td><div class="bar"><i style="width:${Math.min(100, 100 * f.have / f.size).toFixed(1)}%"></i></div></td><td class="mono">${f.source}</td></tr>`;
+  }
+  $('w-table').innerHTML = html;
+  $('w-summary').textContent = `${(have / 1e9).toFixed(1)} / ${(total / 1e9).toFixed(1)} GB on disk · ${(r.free / 1e9).toFixed(0)} GB free`;
+  $('w-download').disabled = r.downloading || r.ready;
+  $('w-download').textContent = r.ready ? 'All weights present' : r.downloading ? 'Downloading …' : 'Download / resume';
+  const p = r.progress;
+  $('w-status').textContent = p ? (p.error ? p.error : p.name === 'done' ? 'download finished' : `${p.name}: ${(p.done / 1e9).toFixed(2)} / ${(p.total / 1e9).toFixed(2)} GB`) : '';
+  $('w-status').classList.toggle('err', !!(p && p.error));
+  clearTimeout(weightTimer);
+  if (r.downloading && $('tab-weights').classList.contains('on')) weightTimer = setTimeout(loadWeights, 1500);
+}
+$('w-download').onclick = async () => { await api('/api/weights/download', {}); loadWeights(); };
+
+// ---------------------------------------------------------------- boot
+(async () => {
+  info = await api('/api/info');
+  $('device').textContent = `${info.device} · Lucid ${info.lucid}`; $('lucid-version').textContent = info.lucid;
+  $('wdot').classList.toggle('ok', info.ready);
+  for (const p of info.presets) $('preset').add(new Option(`${p.key.replace(/_/g, ' ')}`, p.key));
+  const traj = $('trajectory');
+  traj.add(new Option("the preset's own trajectory", '__preset__'));
+  for (const t of info.trajectories) traj.add(new Option(`${t.id.replace(/_/g, ' ')} — max ${t.max_rotation_deg.toFixed(1)}°, peak at frame ${t.peak_frame}`, t.file.replace('.npz', '')));
+  traj.add(new Option('analytic 20° yaw loop (not the project-page recipe)', '__analytic__'));
+  const boxes = $('prompt-boxes');
+  for (let i = 0; i < 7; i++) { const t = document.createElement('textarea'); t.className = 'small'; t.placeholder = `chunk ${i}`; t.style.marginBottom = '5px'; boxes.appendChild(t); }
+  applyPreset(info.presets[0].key); syncProbeFields();
+  if (!info.ready) setStatus('Weights are missing — open the Weights tab to download them.', true);
+})();
+</script>
+</body>
+</html>
