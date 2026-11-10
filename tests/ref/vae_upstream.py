@@ -60,6 +60,9 @@ with torch.no_grad():
     out["fp32.pixels"] = wrapper.decode_to_pixel(out["fp32.video_latent"][:, :3], use_cache=False).half()
     print("fp32 decode", round(time.time() - t0, 1), "s", flush=True)
 
+    save_file({k: v.contiguous() for k, v in out.items()}, str(_upstream.FIXTURES / "vae_upstream_large.safetensors"))
+    print("saved the fp32 part", flush=True)
+
     # fp32 and bf16 on a 64x96 crop (5 frames -> 2 latent frames -> 5 frames).
     crop = clip[:, :5, 200:264, 380:476].unsqueeze(0)
     out["crop_u8"] = out["video_u8"][:5, 200:264, 380:476]
@@ -68,6 +71,8 @@ with torch.no_grad():
         t0 = time.time()
         x = crop.to(torch.bfloat16).mul(2.0).sub(1.0).to(dtype)
         out[f"crop.{name}.latent"] = wrapper.encode_to_latent(x)
+        print(name, "crop encode", round(time.time() - t0, 1), "s", flush=True)
+        save_file({k: v.contiguous() for k, v in out.items()}, str(_upstream.FIXTURES / "vae_upstream_large.safetensors"))
         z = out["crop.fp32.latent"].to(dtype)  # the same latents for both dtypes
         out[f"crop.{name}.pixels"] = wrapper.decode_to_pixel(z, use_cache=False).float()
         print(name, "crop encode + decode", round(time.time() - t0, 1), "s", flush=True)

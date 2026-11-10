@@ -162,4 +162,13 @@ def schedule():
 
 
 if __name__ == "__main__":
-    schedule(); tiny_umt5(); tiny_vae(); tiny_dit()
+    schedule(); tiny_umt5(); tiny_vae(); tiny_dit(); tiny_archive()
+
+
+def tiny_archive():
+    """A small ``torch.save`` archive (fp32, bf16, int64 and a shared-storage view) for the torch-free reader."""
+    base = torch.randn(4, 6)
+    state = {"w": torch.randn(3, 5), "half": torch.randn(7).to(torch.bfloat16), "ids": torch.arange(9), "base": base, "row": base[2]}
+    torch.save(state, str(FIX / "tiny_state.pth"))
+    save_file({k: v.clone() for k, v in state.items()}, str(FIX / "tiny_state.safetensors"))
+    print("tiny_archive", len(state))

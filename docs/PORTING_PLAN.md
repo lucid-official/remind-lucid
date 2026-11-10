@@ -184,7 +184,7 @@ exact. `tests/test_presets.py` compares every resolved schedule, camera
 metric and count with upstream's `--dry-run`, including the analytic-camera
 and default-event fallbacks.
 
-Trajectories are `.npz` with `extrinsics (81, 4, 4)` and `intrinsics (81, 3,
+Trajectories are `.npz` with `extrinsics (81, 3, 4)` and `intrinsics (81, 3,
 3)` in float32 (plus `fps`, `resolution`, unused); read by `io/npy.py`.
 
 ## 8. Lucid operations: missing or questionable, and the composition used
