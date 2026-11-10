@@ -32,6 +32,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -39,7 +40,7 @@ from typing import Callable
 import lucid
 
 HF_ENDPOINT = os.environ.get("HF_ENDPOINT", "https://huggingface.co")
-_CHUNK = 16 << 20
+_CHUNK = 48 << 20
 _ST_DTYPE = {"F32": lucid.float32, "F16": lucid.float16, "BF16": lucid.bfloat16}
 
 Progress = Callable[[str, int, int], None]
@@ -49,27 +50,41 @@ def hf_url(repo: str, filename: str, revision: str = "main") -> str:
     return f"{HF_ENDPOINT}/{repo}/resolve/{revision}/{filename}"
 
 
+_resolved: dict[str, str] = {}  # resolve URL -> signed CDN URL, so a redirect is paid once per file
+
+
 def _request(
     url: str, start: int | None = None, end: int | None = None, retries: int = 8
 ):
     headers = {"User-Agent": "remind-lucid"}
-    token = os.environ.get("HF_TOKEN")
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
     if start is not None:
         headers["Range"] = f"bytes={start}-{'' if end is None else end - 1}"
     for attempt in range(retries):
+        target = _resolved.get(url, url)
+        request_headers = dict(headers)
+        token = os.environ.get("HF_TOKEN")
+        if token and target == url:  # never forward the token to the CDN host
+            request_headers["Authorization"] = f"Bearer {token}"
         try:
-            return urllib.request.urlopen(
-                urllib.request.Request(url, headers=headers), timeout=60
+            response = urllib.request.urlopen(
+                urllib.request.Request(target, headers=request_headers), timeout=60
             )
+            if response.geturl() != url:
+                _resolved[url] = response.geturl()
+            return response
+        except urllib.error.HTTPError as exc:
+            if target != url and exc.code in (400, 401, 403, 404):
+                _resolved.pop(url, None)  # the signed URL expired: resolve again
+                continue
+            if attempt == retries - 1:
+                raise
         except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
             if attempt == retries - 1:
                 raise
             wait = min(60, 2**attempt)
             print(f"  retry in {wait}s after {exc}", file=sys.stderr, flush=True)
             time.sleep(wait)
-    raise AssertionError("unreachable")
+    raise urllib.error.URLError(f"giving up on {url}")
 
 
 def read_range(url: str, start: int, end: int, on_block=None) -> bytes:
@@ -89,6 +104,23 @@ def read_range(url: str, start: int, end: int, on_block=None) -> bytes:
             print(f"  resume after {exc}", file=sys.stderr, flush=True)
             time.sleep(2)
     return bytes(out)
+
+
+_PARALLEL = int(os.environ.get("REMIND_LUCID_CONNECTIONS", "6"))
+_PIECE = 8 << 20
+_pool: ThreadPoolExecutor | None = None
+
+
+def read_parallel(url: str, start: int, end: int) -> bytes:
+    """Bytes ``[start, end)`` over several connections (the Hub's CDN throttles each one)."""
+    global _pool
+    if end - start <= _PIECE or _PARALLEL <= 1:
+        return read_range(url, start, end)
+    if _pool is None:
+        _pool = ThreadPoolExecutor(_PARALLEL)
+    cuts = list(range(start, end, _PIECE)) + [end]
+    parts = _pool.map(lambda ab: read_range(url, ab[0], ab[1]), zip(cuts[:-1], cuts[1:]))
+    return b"".join(parts)
 
 
 def remote_size(url: str) -> int:
@@ -150,7 +182,7 @@ def fetch_file(
     name = f"{repo}/{filename}"
     with open(part, "ab") as fh:
         while done < total:
-            block = read_range(url, done, min(total, done + _CHUNK))
+            block = read_parallel(url, done, min(total, done + _CHUNK))
             fh.write(block)
             done += len(block)
             if progress is not None:
@@ -261,7 +293,7 @@ def fetch_passthrough(
             pos = remote.base + run[0].start + skip
             stop = remote.base + run[-1].end
             while pos < stop:
-                block = read_range(remote.url, pos, min(stop, pos + _CHUNK))
+                block = read_parallel(remote.url, pos, min(stop, pos + _CHUNK))
                 fh.write(block)
                 pos += len(block)
                 if progress is not None:
@@ -313,7 +345,7 @@ class RangeFile(io.RawIOBase):
     """A read-only seekable file over HTTP range requests, with read-ahead.
 
     ``zipfile`` seeks to the end for the central directory, then reads each
-    stored entry front to back; a 16 MB read-ahead window turns that into a
+    stored entry front to back; a 48 MB read-ahead window, fetched over several connections, turns that into a
     few hundred sequential requests.
     """
 
@@ -349,7 +381,7 @@ class RangeFile(io.RawIOBase):
                 # Small reads near the end are the zip directory: fetch a tight window.
                 window = max(end - self.pos, min(_CHUNK, 1 << 20 if self.fetched == 0 else _CHUNK))
                 stop = min(self.size, self.pos + window)
-                self._buf = read_range(self.url, self.pos, stop)
+                self._buf = read_parallel(self.url, self.pos, stop)
                 self._buf_start = lo = self.pos
                 self.fetched += len(self._buf)
                 if self.progress is not None:

@@ -112,7 +112,14 @@ def to_safetensors(src, dest: Path, rename=lambda name: name) -> None:
     archive, root, refs = read_state_dict(src)
     entries, header, offset = [], {}, 0
     uses: dict[str, int] = collections.Counter(r.storage.key for r in refs.values())
-    for name, ref in refs.items():
+    # torch.save lays storages out in the archive by *string* key order
+    # (data/0, data/1, data/10, ...). Writing tensors in archive order makes
+    # the pass over a remote file strictly sequential.
+    position = {
+        name: archive.getinfo(f"{root}/data/{ref.storage.key}").header_offset
+        for name, ref in refs.items()
+    }
+    for name, ref in sorted(refs.items(), key=lambda item: (position[item[0]], item[1].offset)):
         if not ref.is_contiguous():
             raise ValueError(f"{name}: non-contiguous tensors are not supported")
         nbytes = ref.numel * ref.storage.itemsize
