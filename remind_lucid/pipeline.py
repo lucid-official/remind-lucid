@@ -397,6 +397,7 @@ class ReMindPipeline:
                 # encode_chunk_to_cache: one pass at context_timestep = 0 writes this chunk's K/V.
                 model(predicted.permute(0, 2, 1, 3, 4), [0.0] * cs, context, geom, cache, write_key=chunk)  # fmt: skip
                 if probes is not None:
+                    probes.remember(chunk, predicted, context, geom)
                     probes.after_commit(chunk)
                 seconds = time.time() - t0
                 self.timings.chunks.append(round(seconds, 3))

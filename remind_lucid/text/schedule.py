@@ -165,3 +165,36 @@ def chunk_text_prompts_multi(caption: str, events: Sequence[dict], pixel_frames:
 def chunk_text_prompts(caption: str, kind: str, params: dict | None, pixel_frames: int, latent_frames: int, chunk_size: int, *, meta: dict | None = None, recovery_chunks: int = 2) -> list[str]:  # fmt: skip
     """Single-event wrapper of :func:`chunk_text_prompts_multi`."""
     return chunk_text_prompts_multi(caption, [{"kind": kind, "params": params, "meta": meta}], pixel_frames, latent_frames, chunk_size, recovery_chunks=recovery_chunks)  # fmt: skip
+
+
+PHASES = ("none", "enter", "hold", "exit", "recover", "brief")
+
+
+def phase_prompts(caption: str, kind: str, phases: Sequence[str], params: dict | None = None, meta: dict | None = None) -> list[str]:  # fmt: skip
+    """One prompt per chunk from an explicit phase per chunk (not in upstream).
+
+    ``chunk_text_prompts`` derives the phase of each chunk from pixel-frame
+    timings; the conditioning the model receives is only the resulting text.
+    This builds the same texts from the phases directly (``"none"`` is the
+    bare caption), which is what the interruption-duration probe varies.
+    """
+    params = dict(params or {})
+    base = _base_caption(caption)
+    if kind == "light":
+        clauses = _light_clauses()
+    else:
+        clauses = _occluder_clauses(
+            _short_description(meta or params.get("meta"), params),
+            str(params.get("enter_side") or "side"),
+            str(params.get("exit_side") or "side"),
+        )
+    unknown = [p for p in phases if p not in PHASES]
+    if unknown:
+        raise ValueError(f"unknown phases {unknown}; choose from {PHASES}")
+    return [base if p == "none" else f"{base} {clauses[p]}" for p in phases]
+
+
+def phases_of(caption: str, kind: str, prompts: Sequence[str], params: dict | None = None, meta: dict | None = None) -> list[str]:  # fmt: skip
+    """The phase of each prompt of a schedule built by this module (``"none"`` if it is the bare caption)."""
+    table = {text: phase for phase in PHASES for text in phase_prompts(caption, kind, [phase], params, meta)}  # fmt: skip
+    return [table.get(p, "custom") for p in prompts]
