@@ -72,16 +72,16 @@ class DiTConfig:
 def sinusoidal_embedding(dim: int, positions: list[float]) -> Tensor:
     """``sinusoidal_embedding_1d``: ``[cos, sin]`` of ``pos * 10000^(-i / half)`` in float64 (CPU)."""
     half = dim // 2
-    pos = lucid.tensor(positions, dtype=lucid.float64)
-    inv = lucid.pow(10000.0, -lucid.arange(half, dtype=lucid.float64) / half)
+    pos = lucid.tensor(positions, dtype=lucid.float64, device="cpu")
+    inv = lucid.pow(10000.0, -lucid.arange(half, dtype=lucid.float64, device="cpu") / half)
     angle = pos.reshape(-1, 1) * inv.reshape(1, -1)
     return lucid.cat([lucid.cos(angle), lucid.sin(angle)], dim=1)
 
 
 def rope_angles(max_len: int, dim: int, theta: float = 10000.0) -> Tensor:
     """The angles of ``rope_params``: ``pos / theta^(2i / dim)`` in float64, ``(max_len, dim / 2)``."""
-    inv = 1.0 / lucid.pow(theta, lucid.arange(0, dim, 2, dtype=lucid.float64) / dim)
-    return lucid.arange(max_len, dtype=lucid.float64).reshape(-1, 1) * inv.reshape(1, -1)  # fmt: skip
+    inv = 1.0 / lucid.pow(theta, lucid.arange(0, dim, 2, dtype=lucid.float64, device="cpu") / dim)
+    return lucid.arange(max_len, dtype=lucid.float64, device="cpu").reshape(-1, 1) * inv.reshape(1, -1)  # fmt: skip
 
 
 @dataclass
@@ -449,7 +449,7 @@ class CausalWanModel(nn.Module):
         h, w = grid
         f = len(positions)
         cfg = self.cfg
-        index = lucid.tensor(positions, dtype=lucid.int64)
+        index = lucid.tensor(positions, dtype=lucid.int64, device="cpu")
         ta = self._angles[0].index_select(0, index)  # (F, 22)
         angle = lucid.cat(
             [
@@ -559,15 +559,3 @@ class CausalWanModel(nn.Module):
                 taps[f"block_{i}"] = tokens
         out = self.head(tokens, e)
         return self.unpatchify(out, (f, h, w))
-
-
-def load_generator(path, device: str = "metal", dtype=lucid.bfloat16) -> CausalWanModel:
-    """Strict load of ``ReMind-5B.safetensors`` (stored in bf16), cast to ``dtype`` before any LoRA merge."""
-    from remind_lucid.catalog import clean_key
-
-    model = CausalWanModel().eval()
-    state = {clean_key(k): v for k, v in lucid.load_safetensors(str(path)).items()}
-    if dtype != lucid.bfloat16:
-        state = {k: v.to(dtype) for k, v in state.items()}
-    model.load_state_dict(state, strict=True, assign=True)
-    return model.to(device)

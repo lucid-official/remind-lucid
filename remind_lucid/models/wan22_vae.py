@@ -395,8 +395,8 @@ class WanVAE(nn.Module):
         return self.conv2.weight.dtype
 
     def _scale(self, like: Tensor) -> tuple[Tensor, Tensor]:
-        mean = lucid.tensor(LATENT_MEAN, dtype=lucid.float32).to(self.scale_dtype)
-        inv_std = 1.0 / lucid.tensor(LATENT_STD, dtype=lucid.float32).to(self.scale_dtype)  # fmt: skip
+        mean = lucid.tensor(LATENT_MEAN, dtype=lucid.float32, device="cpu").to(self.scale_dtype)
+        inv_std = 1.0 / lucid.tensor(LATENT_STD, dtype=lucid.float32, device="cpu").to(self.scale_dtype)  # fmt: skip
         dev, dt = like.device.type, like.dtype
         return (
             mean.to(dt).to(dev).reshape(1, -1, 1, 1, 1),
@@ -465,13 +465,3 @@ class WanVAE(nn.Module):
     def decode(self, z: Tensor) -> Tensor:
         """``VideoVAE38_.decode``: every latent frame, from a fresh state."""
         return self.decode_stream(z, self.new_state())
-
-
-def load_vae(path, device: str = "metal", dtype=lucid.float32) -> WanVAE:
-    vae = WanVAE().eval()
-    state = lucid.load_safetensors(str(path))
-    state = {k.removeprefix("model."): v for k, v in state.items()}
-    if dtype != lucid.float32:
-        state = {k: v.to(dtype) for k, v in state.items()}
-    vae.load_state_dict(state, strict=True, assign=True)
-    return vae.to(device)

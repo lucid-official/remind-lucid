@@ -1,11 +1,12 @@
-"""Images in, videos out.
+"""Images and videos in, videos out.
 
 Decoding and encoding go through the ``ffmpeg`` binary (raw RGB24 over a
-pipe); everything in between is Lucid. The reference prepares the input
-image with ``torchvision.transforms.Resize((480, 832))`` on a PIL image, i.e.
-Pillow's two-pass bilinear filter in 8-bit fixed point. :func:`pil_resize`
-reproduces it exactly: the fixed-point coefficients are integers, and so are
-the sums, which float64 matrix products represent without rounding.
+pipe); everything in between is Lucid. The reference resizes its inputs with
+``PIL.Image.resize((W, H), LANCZOS)``, Pillow's two-pass filter in 8-bit
+fixed point (a no-op for the bundled presets, which are already 832x480).
+:func:`pil_resize` reproduces it: the fixed-point coefficients are integers,
+and so are the sums, which float64 matrix products represent without
+rounding.
 """
 
 from __future__ import annotations
@@ -79,21 +80,27 @@ def image_from_bytes(data: bytes) -> Tensor:
         return read_image(fh.name)
 
 
+def _lanczos(x: float) -> float:
+    if not -3.0 <= x < 3.0:
+        return 0.0
+    if x == 0.0:
+        return 1.0
+    a, c = math.pi * x, math.pi * x / 3.0
+    return (math.sin(a) / a) * (math.sin(c) / c)
+
+
 def _pil_coefficients(in_size: int, out_size: int) -> Tensor:
-    """Pillow's ``precompute_coeffs`` (bilinear) + ``normalize_coeffs_8bpc``, as an ``(out, in)`` matrix."""
+    """Pillow's ``precompute_coeffs`` (Lanczos, support 3) + ``normalize_coeffs_8bpc``, as an ``(out, in)`` matrix."""
     scale = in_size / out_size
     filterscale = max(scale, 1.0)
-    support = 1.0 * filterscale
+    support = 3.0 * filterscale
     rows = []
     for xx in range(out_size):
         center = (xx + 0.5) * scale
         ss = 1.0 / filterscale
         xmin = max(int(center - support + 0.5), 0)
         xmax = min(int(center + support + 0.5), in_size) - xmin
-        weights = []
-        for x in range(xmax):
-            t = abs((x + xmin - center + 0.5) * ss)
-            weights.append(1.0 - t if t < 1.0 else 0.0)
+        weights = [_lanczos((x + xmin - center + 0.5) * ss) for x in range(xmax)]
         total = sum(weights)
         row = [0.0] * in_size
         for x, wgt in enumerate(weights):
@@ -115,32 +122,50 @@ def _fixed_point_pass(x: Tensor, coeffs: Tensor) -> Tensor:
 
 
 def pil_resize(image: Tensor, height: int, width: int) -> Tensor:
-    """``PIL.Image.resize((width, height), BILINEAR)`` of an ``(H, W, 3)`` 8-bit image, bit for bit."""
+    """``PIL.Image.resize((width, height), LANCZOS)`` of an ``(H, W, 3)`` 8-bit image; identity at equal size."""
     h, w, c = image.shape
+    if (h, w) == (height, width):
+        return image
     x = image.to(lucid.float64)
     if w != width:  # horizontal pass first, as Pillow does
-        x = _fixed_point_pass(x.permute(0, 2, 1), _pil_coefficients(w, width)).permute(
-            0, 2, 1
-        )
+        x = _fixed_point_pass(x.permute(0, 2, 1), _pil_coefficients(w, width)).permute(0, 2, 1)
     if h != height:
-        x = _fixed_point_pass(x.permute(1, 2, 0), _pil_coefficients(h, height)).permute(
-            2, 0, 1
-        )
+        x = _fixed_point_pass(x.permute(1, 2, 0), _pil_coefficients(h, height)).permute(2, 0, 1)
     return x.to(lucid.int16)
 
 
-def image_to_model(image: Tensor, height: int = 480, width: int = 832) -> Tensor:
-    """``Resize -> ToTensor -> Normalize(0.5, 0.5)``: ``(1, 3, 1, H, W)`` in ``[-1, 1]``, float32."""
-    pixels = pil_resize(image, height, width).float() / 255.0
-    pixels = (pixels - 0.5) / 0.5
-    return pixels.permute(2, 0, 1).reshape(1, 3, 1, height, width)
+def frames_to_model(frames: Tensor, dtype) -> Tensor:
+    """``(T, H, W, 3)`` 8-bit frames -> ``(1, 3, T, H, W)`` in ``[-1, 1]``.
+
+    The reference divides by 255 in fp32, casts to the run's dtype and only
+    then maps to ``[-1, 1]`` (``.to(dtype).mul(2.0).sub(1.0)``); the order of
+    the cast matters in half precision and is kept.
+    """
+    pixels = (frames.float() / 255.0).to(dtype) * 2.0 - 1.0
+    return pixels.permute(3, 0, 1, 2).unsqueeze(0)
+
+
+def read_video(path: str | Path, max_frames: int, height: int, width: int) -> Tensor:
+    """The first ``max_frames`` frames of a video as ``(T, H, W, 3)`` 8-bit values, each resized like an image."""
+    path = str(path)
+    w, h = _probe_size(path)
+    raw = subprocess.run(
+        [_ffmpeg(), "-v", "error", "-i", path, "-frames:v", str(max_frames), "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        capture_output=True,
+        check=True,
+    ).stdout
+    n = len(raw) // (w * h * 3)
+    frames = lucid.tensor(memoryview(raw[: n * w * h * 3])).reshape(n, h, w, 3)
+    if (h, w) != (height, width):
+        frames = lucid.stack([pil_resize(frames[i], height, width) for i in range(n)])
+    return frames
 
 
 def to_uint8_frames(video: Tensor) -> list[bytes]:
     """Decoder output ``(3, T, H, W)`` in ``[-1, 1]`` -> RGB24 frames.
 
     ``(v * 0.5 + 0.5).clamp(0, 1) * 255`` truncated to integers, as
-    ``torchvision.io.write_video`` does with the reference's float video.
+    ``utils.video_io.write_mp4`` does with the reference's float video.
     """
     v = ((video.float() * 0.5 + 0.5).clamp(0.0, 1.0) * 255.0).to("cpu")
     v = lucid.floor(v).to(lucid.int16).permute(1, 2, 3, 0)  # (T, H, W, 3)
@@ -151,7 +176,7 @@ class VideoWriter:
     """Append RGB24 frames to an H.264 MP4 through an ffmpeg pipe."""
 
     def __init__(
-        self, path: str | Path, width: int, height: int, fps: int = 16, crf: int = 17
+        self, path: str | Path, width: int, height: int, fps: int = 16, crf: int = 18
     ) -> None:
         self.path = str(path)
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)

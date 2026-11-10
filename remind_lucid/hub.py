@@ -379,7 +379,10 @@ class RangeFile(io.RawIOBase):
             lo = self._buf_start
             if not (lo <= self.pos < lo + len(self._buf)):
                 # Small reads near the end are the zip directory: fetch a tight window.
-                window = max(end - self.pos, min(_CHUNK, 1 << 20 if self.fetched == 0 else _CHUNK))
+                # The zip directory is read first (small reads near the end): a tight
+                # window there, then read-ahead windows, so progress moves during one
+                # multi-GB entry.
+                window = 1 << 20 if self.fetched == 0 else _CHUNK
                 stop = min(self.size, self.pos + window)
                 self._buf = read_parallel(self.url, self.pos, stop)
                 self._buf_start = lo = self.pos

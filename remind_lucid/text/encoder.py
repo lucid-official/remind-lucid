@@ -24,11 +24,13 @@ SEQ_LEN = 512
 
 
 def load_text_encoder(device: str = "metal", dtype=lucid.bfloat16) -> UMT5Encoder:
-    model = UMT5Encoder().eval()
-    state = lucid.load_safetensors(str(catalog.t5_path()))
+    from remind_lucid.pipeline import build_on
+
+    model = build_on(device, dtype, UMT5Encoder)
+    state = lucid.load_safetensors(str(catalog.t5_path()), device=device)
     state = {k: (v if v.dtype == dtype else v.to(dtype)) for k, v in state.items()}
     model.load_state_dict(state, strict=True, assign=True)
-    return model.to(device)
+    return model.eval()
 
 
 def _cache_path(text: str, dtype_name: str) -> Path:
@@ -41,8 +43,8 @@ def encode_one(model: UMT5Encoder, tokenizer: UMT5Tokenizer, text: str) -> Tenso
     """One prompt -> ``(512, 4096)`` with padded rows zeroed."""
     ids, mask = tokenizer.batch([text])
     with lucid.no_grad():
-        ids_t = lucid.tensor(ids, dtype=lucid.int64)
-        mask_t = lucid.tensor(mask, dtype=lucid.int64)
+        ids_t = lucid.tensor(ids, dtype=lucid.int64, device="cpu")
+        mask_t = lucid.tensor(mask, dtype=lucid.int64, device="cpu")
         context = model(ids_t, mask_t)[0]
         keep = mask_t.to(context.device.type)[0].reshape(-1, 1) != 0
         context = lucid.where(keep, context, 0.0)

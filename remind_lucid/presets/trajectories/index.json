@@ -1,0 +1,241 @@
+{
+  "schema_version": 1,
+  "provenance": "Pair-fixed InSpatio camera.npz files from the 12 selected ReMind project-page camera cases.",
+  "frames": 81,
+  "coordinate_convention": "OpenCV camera-to-world; +pitch looks up and +yaw looks right. Names describe peak signed camera-coordinate rotation.",
+  "usage": "Preserve every NPZ verbatim. The intrinsics intentionally match the page runs and must not be rescaled.",
+  "trajectories": [
+    {
+      "id": "01_diag_down_left_17deg",
+      "file": "01_diag_down_left_17deg.npz",
+      "motion": {
+        "pitch": "down",
+        "yaw": "left"
+      },
+      "peak_euler_xyz_deg": [
+        -11.99,
+        -12.04,
+        -1.11
+      ],
+      "peak_frame": 41,
+      "max_rotation_deg": 17.0947,
+      "final_rotation_deg": 1.2001,
+      "max_translation": 0.07101,
+      "final_translation": 0.05297,
+      "strength": "moderate",
+      "page_case": "v2_camera_01_pan_yaw_8dir_011556"
+    },
+    {
+      "id": "02_pitch_up_17deg",
+      "file": "02_pitch_up_17deg.npz",
+      "motion": {
+        "pitch": "up"
+      },
+      "peak_euler_xyz_deg": [
+        16.86,
+        1.11,
+        -0.71
+      ],
+      "peak_frame": 40,
+      "max_rotation_deg": 16.9215,
+      "final_rotation_deg": 0.5015,
+      "max_translation": 0.02399,
+      "final_translation": 0.00774,
+      "strength": "moderate",
+      "page_case": "v2_camera_10_pan_yaw_8dir_018092"
+    },
+    {
+      "id": "03_diag_up_left_18deg",
+      "file": "03_diag_up_left_18deg.npz",
+      "motion": {
+        "pitch": "up",
+        "yaw": "left"
+      },
+      "peak_euler_xyz_deg": [
+        12.48,
+        -12.98,
+        -0.03
+      ],
+      "peak_frame": 41,
+      "max_rotation_deg": 17.9879,
+      "final_rotation_deg": 0.1232,
+      "max_translation": 0.0154,
+      "final_translation": 0.0016,
+      "strength": "moderate",
+      "page_case": "v2_camera_17_pan_yaw_8dir_001075"
+    },
+    {
+      "id": "04_diag_up_right_17deg",
+      "file": "04_diag_up_right_17deg.npz",
+      "motion": {
+        "pitch": "up",
+        "yaw": "right"
+      },
+      "peak_euler_xyz_deg": [
+        11.69,
+        12.68,
+        -0.18
+      ],
+      "peak_frame": 42,
+      "max_rotation_deg": 17.2498,
+      "final_rotation_deg": 0.4234,
+      "max_translation": 0.01729,
+      "final_translation": 0.01273,
+      "strength": "moderate",
+      "page_case": "v2_camera_18_pan_yaw_8dir_013910"
+    },
+    {
+      "id": "05_yaw_right_21deg",
+      "file": "05_yaw_right_21deg.npz",
+      "motion": {
+        "yaw": "right"
+      },
+      "peak_euler_xyz_deg": [
+        -0.06,
+        20.64,
+        0.09
+      ],
+      "peak_frame": 40,
+      "max_rotation_deg": 20.6369,
+      "final_rotation_deg": 0.2476,
+      "max_translation": 0.01088,
+      "final_translation": 0.00466,
+      "strength": "moderate",
+      "page_case": "v2_camera_19_pan_yaw_8dir_014815"
+    },
+    {
+      "id": "06_diag_up_left_32deg",
+      "file": "06_diag_up_left_32deg.npz",
+      "motion": {
+        "pitch": "up",
+        "yaw": "left"
+      },
+      "peak_euler_xyz_deg": [
+        22.41,
+        -22.54,
+        0.14
+      ],
+      "peak_frame": 38,
+      "max_rotation_deg": 31.7033,
+      "final_rotation_deg": 0.458,
+      "max_translation": 0.04717,
+      "final_translation": 0.04458,
+      "strength": "strong",
+      "page_case": "v2_camera_23_pan_yaw_8dir_005861"
+    },
+    {
+      "id": "07_pitch_up_14deg",
+      "file": "07_pitch_up_14deg.npz",
+      "motion": {
+        "pitch": "up"
+      },
+      "peak_euler_xyz_deg": [
+        14.04,
+        -0.13,
+        0.3
+      ],
+      "peak_frame": 39,
+      "max_rotation_deg": 14.0477,
+      "final_rotation_deg": 0.036,
+      "max_translation": 0.0265,
+      "final_translation": 0.0013,
+      "strength": "gentle",
+      "page_case": "s1_camera_02_pan_yaw_8dir_005972"
+    },
+    {
+      "id": "08_yaw_left_26deg",
+      "file": "08_yaw_left_26deg.npz",
+      "motion": {
+        "yaw": "left"
+      },
+      "peak_euler_xyz_deg": [
+        0.11,
+        -25.77,
+        0.09
+      ],
+      "peak_frame": 40,
+      "max_rotation_deg": 25.7731,
+      "final_rotation_deg": 0.16,
+      "max_translation": 0.00573,
+      "final_translation": 0.00376,
+      "strength": "strong",
+      "page_case": "s1_camera_06_pan_yaw_8dir_006127"
+    },
+    {
+      "id": "09_yaw_right_36deg",
+      "file": "09_yaw_right_36deg.npz",
+      "motion": {
+        "yaw": "right"
+      },
+      "peak_euler_xyz_deg": [
+        -0.2,
+        35.56,
+        -0.23
+      ],
+      "peak_frame": 40,
+      "max_rotation_deg": 35.5625,
+      "final_rotation_deg": 0.146,
+      "max_translation": 0.01749,
+      "final_translation": 0.00314,
+      "strength": "strong",
+      "page_case": "s1_camera_08_pan_yaw_8dir_012352"
+    },
+    {
+      "id": "10_yaw_right_22deg",
+      "file": "10_yaw_right_22deg.npz",
+      "motion": {
+        "yaw": "right"
+      },
+      "peak_euler_xyz_deg": [
+        0.38,
+        22.44,
+        1.13
+      ],
+      "peak_frame": 40,
+      "max_rotation_deg": 22.4651,
+      "final_rotation_deg": 0.3627,
+      "max_translation": 0.00718,
+      "final_translation": 0.00327,
+      "strength": "moderate",
+      "page_case": "s1_camera_09_pan_yaw_8dir_005728"
+    },
+    {
+      "id": "11_pitch_down_15deg",
+      "file": "11_pitch_down_15deg.npz",
+      "motion": {
+        "pitch": "down"
+      },
+      "peak_euler_xyz_deg": [
+        -14.61,
+        0.05,
+        0.08
+      ],
+      "peak_frame": 41,
+      "max_rotation_deg": 14.6116,
+      "final_rotation_deg": 0.3202,
+      "max_translation": 0.0068,
+      "final_translation": 0.00677,
+      "strength": "gentle",
+      "page_case": "s1_camera_11_pan_yaw_8dir_006265"
+    },
+    {
+      "id": "12_yaw_left_22deg",
+      "file": "12_yaw_left_22deg.npz",
+      "motion": {
+        "yaw": "left"
+      },
+      "peak_euler_xyz_deg": [
+        0.43,
+        -22.06,
+        -0.97
+      ],
+      "peak_frame": 40,
+      "max_rotation_deg": 22.0814,
+      "final_rotation_deg": 0.8072,
+      "max_translation": 0.01166,
+      "final_translation": 0.0042,
+      "strength": "moderate",
+      "page_case": "s1_camera_21_pan_yaw_8dir_011177"
+    }
+  ]
+}
