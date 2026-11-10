@@ -63,6 +63,12 @@ def memory_gb() -> float:
     return lucid.metal.memory_allocated() / 1e9 if lucid.metal.is_available() else 0.0
 
 
+def release_cache(tensor: Tensor) -> None:
+    """Return the Metal buffer cache to the system (a no-op for CPU tensors)."""
+    if tensor.device.type == "metal":
+        lucid.metal.empty_cache()
+
+
 def peak_memory_gb() -> float:
     return lucid.metal.max_memory_allocated() / 1e9 if lucid.metal.is_available() else 0.0  # fmt: skip
 
@@ -230,7 +236,9 @@ class Chunk:
     latents: Tensor  # (1, chunk_size, 48, h, w)
     seconds: float
     kv_tokens: int  # history tokens this chunk attended to
-    known: bool  # every frame came from the input (V2V prefix): no network call was needed
+    known: (
+        bool  # every frame came from the input (V2V prefix): no network call was needed
+    )
 
 
 @dataclass
@@ -304,7 +312,9 @@ class ReMindPipeline:
 
                 # Two blocks: 2 x 7 signatures x ~0.84 GB is what the memory budget allows (see accel.py).
                 self.generator.runner = BlockPrograms(self.generator, blocks=2)
-                self.log("lucid.compile: blocks 0-1 compiled (not faster than eager; see README)")
+                self.log(
+                    "lucid.compile: blocks 0-1 compiled (not faster than eager; see README)"
+                )
             self.timings.mark("load_generator", t0)
             self.log(f"generator ready, in use {memory_gb():.1f} GB")
         return self.generator
@@ -410,6 +420,7 @@ class ReMindPipeline:
                 self.timings.chunks.append(round(seconds, 3))
                 if taps is not None:
                     taps[f"latent_{chunk}"] = predicted
+                release_cache(predicted)
                 yield Chunk(chunk, predicted, seconds, kv_tokens, all(known))
         if probes is not None:
             probes.end()
@@ -446,7 +457,14 @@ class StreamingDecoder:
 
     def __call__(self, latents: Tensor) -> Tensor:
         """``(1, T, 48, h, w)`` latents -> ``(3, T', H, W)`` pixels in ``[-1, 1]``."""
+        z = latents.permute(0, 2, 1, 3, 4)
+        outs = []
         with lucid.no_grad():
-            pixels = self.vae.decode_stream(latents.permute(0, 2, 1, 3, 4), self.state)
-            lucid.eval(pixels)
-        return pixels[0]
+            for i in range(z.shape[2]):
+                pixels = self.vae.decode_stream(z[:, :, i : i + 1], self.state)
+                lucid.eval(pixels)
+                outs.append(pixels)
+                # The 480x832 stages leave ~9 GB in the Metal buffer cache; beside the
+                # generator that pushes a 36 GB machine into swap (README, speed).
+                release_cache(pixels)
+        return (outs[0] if len(outs) == 1 else lucid.cat(outs, dim=2))[0]

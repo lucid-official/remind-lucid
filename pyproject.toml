@@ -33,7 +33,7 @@ remind-generate = "remind_lucid.generate:main"
 include = ["remind_lucid*"]
 
 [tool.setuptools.package-data]
-remind_lucid = ["server/static/*", "presets/*.json", "presets/assets/*"]
+remind_lucid = ["server/static/*", "presets/*.json", "presets/assets/*", "presets/trajectories/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
