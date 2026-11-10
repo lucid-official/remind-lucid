@@ -246,3 +246,21 @@ def encode_jpeg(frame: bytes, width: int, height: int, quality: int = 4) -> byte
         capture_output=True,
         check=True,
     ).stdout
+
+
+def make_gif(video: str | Path, out: str | Path, width: int = 416, fps: int = 8, colors: int = 96) -> None:
+    """A palette GIF of a video (for README media)."""
+    flt = f"fps={fps},scale={width}:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors={colors}:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4"  # fmt: skip
+    subprocess.run([_ffmpeg(), "-v", "error", "-y", "-i", str(video), "-filter_complex", flt, str(out)], check=True)  # fmt: skip
+
+
+def make_strip(videos: list[str | Path], out: str | Path, frames: list[int], width: int = 208) -> None:
+    """A contact sheet: one row per video, one column per frame index (for README media)."""
+    select = "+".join(f"eq(n\\,{f})" for f in frames)
+    inputs, rows = [], []
+    for i, video in enumerate(videos):
+        inputs += ["-i", str(video)]
+        rows.append(f"[{i}:v]select='{select}',scale={width}:-1,tile={len(frames)}x1[r{i}]")
+    stack = "".join(f"[r{i}]" for i in range(len(videos)))
+    graph = ";".join(rows) + (f";{stack}vstack=inputs={len(videos)}[o]" if len(videos) > 1 else ";[r0]copy[o]")  # fmt: skip
+    subprocess.run([_ffmpeg(), "-v", "error", "-y", *inputs, "-filter_complex", graph, "-map", "[o]", "-frames:v", "1", "-update", "1", "-q:v", "3", str(out)], check=True)  # fmt: skip
