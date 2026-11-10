@@ -254,7 +254,7 @@ class CausalSelfAttention(nn.Module):
         self.camera_phase_mlp = CameraPhaseMLP(cfg.pose_dim, cfg.head_dim // 2)
         self.probe = None  # research hook (remind_lucid.probes); None = the reference path
 
-    def qkv(self, x: Tensor, cos: Tensor, sin: Tensor, geom: ChunkGeometry):
+    def qkv(self, x: Tensor, cos: Tensor, sin: Tensor, p_inv_t: Tensor, frames: int):
         """Rotated queries and keys and the camera-augmented values, each ``(B, heads, L, d)``."""
         b, s, _ = x.shape
         n, d = self.num_heads, self.head_dim
@@ -266,32 +266,20 @@ class CausalSelfAttention(nn.Module):
         q, k = q.to(dtype), k.to(dtype)
         # V <- V + value_proj(P^-1 V)
         v_hnd = v.reshape(b, s, n, d).permute(0, 2, 1, 3)
-        v_p = _tiled_projection(v_hnd, geom.P_inv_t, geom.frames)
+        v_p = _tiled_projection(v_hnd, p_inv_t, frames)
         v = v + self.value_proj(v_p.permute(0, 2, 1, 3).reshape(b, s, n * d))
         v = v.reshape(b, s, n, d).permute(0, 2, 1, 3)
         return q, k, v
 
-    def forward(self, x: Tensor, cos: Tensor, sin: Tensor, geom: ChunkGeometry, cache: KVCache, block: int, write_key: int | None) -> Tensor:  # fmt: skip
-        b, s, _ = x.shape
-        q, k, v = self.qkv(x, cos, sin, geom)
-        if write_key is not None:
-            # Context pass: cache this chunk's K/V and attend to the chunk alone.
-            cache.write(block, write_key, k, v)
-            k_full, v_full = k, v
-        else:
-            hist = cache.read(block)
-            if hist is None:
-                k_full, v_full = k, v
-            else:
-                k_full = lucid.cat([hist[0], k], dim=2)
-                v_full = lucid.cat([hist[1], v], dim=2)
+    def attend(self, q: Tensor, k_full: Tensor, v_full: Tensor, p_t: Tensor, frames: int, block: int = -1) -> Tensor:  # fmt: skip
+        """Attention over ``[history | chunk]`` and the output projections: ``o(x) + prope_proj(P x)``."""
+        b, _, s, _ = q.shape
         if self.probe is not None:
             out = self.probe(block, q, k_full, v_full, s)
         else:
             out = F.scaled_dot_product_attention(q, k_full, v_full)
         flat = out.permute(0, 2, 1, 3).reshape(b, s, -1)
-        # o(x) + prope_proj(P x)
-        out_p = _tiled_projection(out, geom.P_t, geom.frames)
+        out_p = _tiled_projection(out, p_t, frames)
         return self.o(flat) + self.prope_proj(out_p.permute(0, 2, 1, 3).reshape(b, s, -1))  # fmt: skip
 
 
@@ -338,8 +326,15 @@ class AttentionBlock(nn.Module):
         self.ffn = nn.Sequential(LoRALinear(cfg.dim, cfg.ffn_dim), nn.GELU(approximate="tanh"), LoRALinear(cfg.ffn_dim, cfg.dim))  # fmt: skip
         self.modulation = nn.Parameter(lucid.zeros(1, 6, cfg.dim))
 
-    def forward(self, x: Tensor, e: Tensor, context: Tensor, cos: Tensor, sin: Tensor, geom: ChunkGeometry, cache: KVCache, block: int, write_key: int | None) -> Tensor:  # fmt: skip
-        """``x``: ``(B, L, C)``; ``e``: ``(B, F, 6, C)``; ``context``: ``(N, 512, C)``, one per group of frames."""
+    def step(self, x: Tensor, e: Tensor, context: Tensor, cos: Tensor, sin: Tensor, p_t: Tensor, p_inv_t: Tensor, hist_k: Tensor | None = None, hist_v: Tensor | None = None, block: int = -1):  # fmt: skip
+        """One block as a pure function of tensors: returns ``(x_out, k, v)``.
+
+        ``x``: ``(B, L, C)``; ``e``: ``(B, F, 6, C)``; ``context``: ``(N, 512,
+        C)``, one per group of ``F / N`` frames; ``hist_k`` / ``hist_v``: the
+        cached history ``(B, heads, L_hist, d)`` or ``None``. ``k`` and ``v``
+        are this chunk's rotated keys and augmented values (what a commit
+        pass caches). This is the unit ``remind_lucid.accel`` compiles.
+        """
         b, l, d = x.shape
         f = e.shape[1]
         tpf = l // f
@@ -352,13 +347,18 @@ class AttentionBlock(nn.Module):
         def residual(h: Tensor, y: Tensor, gate: Tensor) -> Tensor:
             return (h.reshape(b, f, tpf, d) + y.reshape(b, f, tpf, d) * gate).reshape(b, l, d)  # fmt: skip
 
-        y = self.self_attn(modulate(self.norm1(x), mod[1], mod[0]), cos, sin, geom, cache, block, write_key)  # fmt: skip
-        x = residual(x, y, mod[2])
+        attn = self.self_attn
+        q, k, v = attn.qkv(modulate(self.norm1(x), mod[1], mod[0]), cos, sin, p_inv_t, f)
+        if hist_k is None:
+            k_full, v_full = k, v
+        else:
+            k_full, v_full = lucid.cat([hist_k, k], dim=2), lucid.cat([hist_v, v], dim=2)
+        x = residual(x, attn.attend(q, k_full, v_full, p_t, f, block), mod[2])
         n = context.shape[0]
         cross = self.cross_attn(self.norm3(x).reshape(b * n, l // n, d), context)
         x = x + cross.reshape(b, l, d)
         y = self.ffn(modulate(self.norm2(x), mod[4], mod[3]))
-        return residual(x, y, mod[5])
+        return residual(x, y, mod[5]), k, v
 
 
 class Head(nn.Module):
@@ -399,6 +399,12 @@ class CausalWanModel(nn.Module):
             rope_angles(1024, 2 * (d // 6)),
         )
         self._phase_weights: Tensor | None = None
+        # Optional ``runner(i, args, hist) -> (x, k, v)`` replacing ``blocks[i].step``
+        # (``remind_lucid.accel.BlockPrograms``); None = eager.
+        self.runner = None
+
+    def _probing(self) -> bool:
+        return any(blk.self_attn.probe is not None for blk in self.blocks)
 
     @property
     def dtype(self):
@@ -552,8 +558,20 @@ class CausalWanModel(nn.Module):
         e, e0 = self.embed_time(timesteps)
         if taps is not None:
             taps["patch"], taps["e"] = tokens, e
+        runner = self.runner if (self.runner is not None and not self._probing()) else None
         for i, block in enumerate(self.blocks):
-            tokens = block(tokens, e0, context, geom.cos[i], geom.sin[i], geom, cache, i, write_key)  # fmt: skip
+            # A commit pass attends to the chunk alone and caches its K/V; a
+            # denoising step reads the history.
+            hist = None if write_key is not None else cache.read(i)
+            args = (tokens, e0, context, geom.cos[i], geom.sin[i], geom.P_t, geom.P_inv_t)
+            if runner is not None:
+                tokens, k, v = runner(i, args, hist)
+            elif hist is None:
+                tokens, k, v = block.step(*args, block=i)
+            else:
+                tokens, k, v = block.step(*args, hist[0], hist[1], block=i)
+            if write_key is not None:
+                cache.write(i, write_key, k, v)
             lucid.eval(tokens)
             if taps is not None:
                 taps[f"block_{i}"] = tokens

@@ -87,3 +87,51 @@ class CompiledDecoder:
             pixels = unpatchify(pixels, vae.cfg.patch).float().clamp(-1.0, 1.0)
             lucid.eval(pixels)
         return pixels[0]
+
+
+# --------------------------------------------------------------------------- #
+# DiT blocks
+# --------------------------------------------------------------------------- #
+
+
+class _BlockFresh(nn.Module):
+    """A block with no history: chunk 0's denoising steps and every commit pass."""
+
+    def __init__(self, block: nn.Module) -> None:
+        super().__init__()
+        self.block = block
+
+    def forward(self, x, e, context, cos, sin, p_t, p_inv_t):
+        return self.block.step(x, e, context, cos, sin, p_t, p_inv_t)
+
+
+class _BlockHistory(nn.Module):
+    """A block attending to cached history: the denoising steps of chunks 1..6."""
+
+    def __init__(self, block: nn.Module) -> None:
+        super().__init__()
+        self.block = block
+
+    def forward(self, x, e, context, cos, sin, p_t, p_inv_t, hist_k, hist_v):
+        return self.block.step(x, e, context, cos, sin, p_t, p_inv_t, hist_k, hist_v)
+
+
+class BlockPrograms:
+    """One ``lucid.compile`` program per DiT block and call shape.
+
+    The history grows by 1,170 tokens per chunk, so a rollout meets seven
+    signatures per block: no history, then 1,170 ... 7,020 cached tokens.
+    ``dynamic=False`` compiles one executable per signature (210 in all, each
+    reused for the four denoising steps of its chunk and by every later
+    video); ``dynamic=True`` asks for one shape-polymorphic executable per
+    block. Install with ``model.runner = BlockPrograms(model)``.
+    """
+
+    def __init__(self, model: nn.Module, dynamic: bool | None = False) -> None:
+        self.fresh = [lucid.compile(_BlockFresh(b).eval(), dynamic=dynamic) for b in model.blocks]  # fmt: skip
+        self.history = [lucid.compile(_BlockHistory(b).eval(), dynamic=dynamic) for b in model.blocks]  # fmt: skip
+
+    def __call__(self, index: int, args: tuple, hist):
+        if hist is None:
+            return self.fresh[index](*args)
+        return self.history[index](*args, hist[0], hist[1])

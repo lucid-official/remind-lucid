@@ -2,11 +2,15 @@
 
     .venv-ref/bin/python tests/ref/vae_upstream.py
 
-Upstream runs its VAE in bf16 (``pipeline.to(dtype=bf16)``); both are dumped
-so the port can decide fp32 vs bf16 on Metal with numbers. Inputs are the
-first frame of preset 01 and the 21-frame prefix of preset 08, prepared
-exactly as ``remind_inference.py`` does (PIL / imageio). Writes
-``tests/fixtures/vae_upstream_large.safetensors`` (not in git).
+Upstream runs its VAE in bf16 (``pipeline.to(dtype=bf16)``). torch's CPU
+bf16 convolutions are about three orders of magnitude slower than fp32 (one
+832x480 frame did not finish encoding in 25 minutes; fp32 takes about a
+second), so the full-resolution reference is fp32 and bf16 is run on a
+64x96 crop — enough to compare bf16 with bf16 and to choose the VAE dtype
+on Metal with numbers. Inputs are the first frame of preset 01 and the
+21-frame prefix of preset 08, prepared exactly as ``remind_inference.py``
+does (PIL / imageio). Writes ``tests/fixtures/vae_upstream_large.safetensors``
+(not in git).
 """
 
 import _upstream  # noqa: F401
@@ -44,20 +48,29 @@ out["video_u8"] = torch.from_numpy(np.stack(frames[:21]))
 clip = torch.from_numpy(np.stack(frames[:21]).astype(np.float32) / 255.0).permute(3, 0, 1, 2)
 
 with torch.no_grad():
+    # fp32, full resolution: image, 21-frame clip, and the decode of the clip's first 3 latent frames.
+    t0 = time.time()
+    out["fp32.image_latent"] = wrapper.encode_to_latent(frame.unsqueeze(1).unsqueeze(0).mul(2.0).sub(1.0))
+    out["fp32.image5_latent"] = wrapper.encode_to_latent(frame.unsqueeze(1).repeat(1, 5, 1, 1).unsqueeze(0).mul(2.0).sub(1.0))
+    # The inputs upstream feeds are rounded to bf16 before the [-1, 1] mapping; do the same here.
+    vid = clip.unsqueeze(0).to(torch.bfloat16).mul(2.0).sub(1.0).float()
+    out["fp32.video_latent"] = wrapper.encode_to_latent(vid)  # (1, 6, 48, 30, 52)
+    print("fp32 encode", round(time.time() - t0, 1), "s", flush=True)
+    t0 = time.time()
+    out["fp32.pixels"] = wrapper.decode_to_pixel(out["fp32.video_latent"][:, :3], use_cache=False).half()
+    print("fp32 decode", round(time.time() - t0, 1), "s", flush=True)
+
+    # fp32 and bf16 on a 64x96 crop (5 frames -> 2 latent frames -> 5 frames).
+    crop = clip[:, :5, 200:264, 380:476].unsqueeze(0)
+    out["crop_u8"] = out["video_u8"][:5, 200:264, 380:476]
     for name, dtype in (("fp32", torch.float32), ("bf16", torch.bfloat16)):
         wrapper.model.to(dtype)
         t0 = time.time()
-        img = frame.unsqueeze(1).unsqueeze(0).to(dtype).mul(2.0).sub(1.0)  # (1, 3, 1, H, W)
-        out[f"{name}.image_latent"] = wrapper.encode_to_latent(img)
-        vid = clip.unsqueeze(0).to(dtype).mul(2.0).sub(1.0)
-        if name == "fp32":
-            lat = wrapper.encode_to_latent(vid)  # (1, 6, 48, 30, 52), float
-            out["fp32.video_latent"] = lat
-        print(name, "encode", round(time.time() - t0, 1), "s", flush=True)
-        t0 = time.time()
-        z = out["fp32.video_latent"][:, :3].to(dtype)  # the same latents for both dtypes
-        out[f"{name}.pixels"] = wrapper.decode_to_pixel(z, use_cache=False).half()  # (1, 9, 3, 480, 832)
-        print(name, "decode", round(time.time() - t0, 1), "s", flush=True)
+        x = crop.to(torch.bfloat16).mul(2.0).sub(1.0).to(dtype)
+        out[f"crop.{name}.latent"] = wrapper.encode_to_latent(x)
+        z = out["crop.fp32.latent"].to(dtype)  # the same latents for both dtypes
+        out[f"crop.{name}.pixels"] = wrapper.decode_to_pixel(z, use_cache=False).float()
+        print(name, "crop encode + decode", round(time.time() - t0, 1), "s", flush=True)
 
 save_file({k: v.contiguous() for k, v in out.items()}, str(_upstream.FIXTURES / "vae_upstream_large.safetensors"))
 print({k: tuple(v.shape) for k, v in out.items()})

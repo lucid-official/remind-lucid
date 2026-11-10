@@ -416,12 +416,9 @@ class ReMindPipeline:
     # -- decode ------------------------------------------------------------- #
 
     def decoder(self) -> "StreamingDecoder":
-        vae = self.ensure_vae()
-        if self.accelerate:
-            from remind_lucid.accel import CompiledDecoder
-
-            return CompiledDecoder(vae)
-        return StreamingDecoder(vae)
+        """The streaming VAE decoder. Always eager: the compiled decoder is slower and
+        memory-hungry at this resolution (``tests/bench/compile_vae.py``, README)."""
+        return StreamingDecoder(self.ensure_vae())
 
     def release_generator(self) -> None:
         self.generator = None

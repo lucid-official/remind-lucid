@@ -14,6 +14,11 @@ no flash-attn, so upstream's own SDPA fallback). What else differs from
 * the text encoder is dropped after the prompts are encoded (36 GB machine);
 * only the frames the known prefix depends on are VAE-encoded (the encoder
   is causal; ``vae_upstream.py`` checks that on the released weights);
+* **the VAE runs in fp32, not bf16.** This one is numerical. torch's CPU
+  bf16 convolutions are ~1000x slower than fp32 (``vae_upstream.py``); a
+  bf16 decode of 21 frames would take days. The VAE's input is still rounded
+  to bf16 as upstream does, and its latents are cast to bf16 for the
+  generator. bf16-vs-bf16 VAE agreement is measured separately on a crop;
 * ``--chunks N`` rolls out the first N chunks only (later chunks do not
   influence earlier ones).
 
@@ -93,7 +98,8 @@ if task == "i2v":
 else:
     source_video, _ = R.video_prefix_to_padded_video(preset["_input_video_path"], seed_latent_frames=seed_latent_frames,
                                                      frames=seed_pixel_frames, width=width, height=height, device=device, dtype=dtype)
-prefix = pipeline.vae.encode_to_latent(source_video).to(device=device, dtype=dtype)
+pipeline.vae.model.float()
+prefix = pipeline.vae.encode_to_latent(source_video.float()).to(device=device, dtype=dtype)
 stamp("vae_encode", t0)
 out["source_prefix"] = prefix
 latent_frames = (frames - 1) // 4 + 1
@@ -179,7 +185,8 @@ out["latents"] = generated
 
 if not args.no_decode:
     t0 = time.time()
-    decoded = pipeline.vae.decode_to_pixel(generated, use_cache=False)
+    with torch.no_grad():
+        decoded = pipeline.vae.decode_to_pixel(generated.float(), use_cache=False)
     out["pixels"] = decoded.float().mul(0.5).add(0.5).clamp(0, 1)[0].half()  # (T, 3, H, W) in [0, 1]
     stamp("vae_decode", t0)
 
