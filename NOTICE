@@ -1,0 +1,35 @@
+rdm-lucid
+A re-implementation of ReMind on Lucid.
+
+This repository ports, to the Lucid framework, code from the projects below.
+The ported code is a derivative of them and is distributed under the Creative
+Commons Attribution-NonCommercial 4.0 International license (LICENSE), which
+restricts use to non-commercial purposes. The released ReMind weights
+(huggingface.co/AppliedIntuitionResearch/ReMind) are under the same license.
+No weights are redistributed here.
+
+ReMind
+  Source: https://github.com/Applied-Intuition-Open-Source/ReMind
+  Copyright 2026 Applied Intuition, Inc.
+  License: Creative Commons Attribution-NonCommercial 4.0 International
+
+Wan2.2 (causal DiT blocks, Wan2.2 VAE, UMT5 encoder wrapper)
+  Source: https://github.com/Wan-Video/Wan2.2
+  Copyright 2024-2025 The Alibaba Wan Team Authors. All rights reserved.
+  License: Apache License 2.0
+
+PRoPE (projective camera positional encoding)
+  Source: https://github.com/liruilong940607/prope
+  Copyright (c) Authors of "PRoPE: Projective Positional Encoding for
+  Multiview Transformers"
+  License: MIT License
+
+UMT5 (text encoder architecture and tokenizer)
+  Source: https://github.com/huggingface/transformers
+  Copyright The Google Research Authors and The HuggingFace Inc. team.
+  License: Apache License 2.0
+
+Self-Forcing (chunk-causal KV-cache inference scaffold used by ReMind)
+  Source: https://github.com/guandeh17/Self-Forcing
+  Copyright (c) 2025 The Self-Forcing Authors. All rights reserved.
+  License: Apache License 2.0

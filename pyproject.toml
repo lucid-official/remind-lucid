@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rdm-lucid"
+version = "0.1.0"
+description = "ReMind (arXiv 2605.25333) re-implemented on Lucid for Apple Silicon"
+readme = "README.md"
+requires-python = ">=3.14"
+license = { text = "CC-BY-NC-4.0" }
+authors = [{ name = "Chan Lee" }]
+keywords = ["video-generation", "world-model", "dynamic-memory", "autoregressive", "distillation", "apple-silicon", "lucid"]
+# The models and pipeline import nothing but Lucid and the standard library
+# (tests/test_public_api.py enforces it); ffmpeg is used for media I/O.
+dependencies = ["lucid-dl==3.16.4", "tqdm"]  # tqdm: CLI progress bar only
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.urls]
+Repository = "https://github.com/lucid-official/rdm-lucid"
+Paper = "https://arxiv.org/abs/2605.25333"
+"Upstream (ReMind)" = "https://github.com/Applied-Intuition-Open-Source/ReMind"
+Weights = "https://huggingface.co/AppliedIntuitionResearch/ReMind"
+"Runtime (Lucid)" = "https://github.com/lucid-official/lucid"
+
+[project.scripts]
+rdm-download = "rdm_lucid.download:main"
+rdm-generate = "rdm_lucid.generate:main"
+
+[tool.setuptools.packages.find]
+include = ["rdm_lucid*"]
+
+[tool.setuptools.package-data]
+rdm_lucid = ["server/static/*", "presets/*.json", "presets/assets/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
