@@ -18,13 +18,19 @@ from remind_lucid.accel import CompiledDecoder
 from remind_lucid.io import media
 from remind_lucid.pipeline import StreamingDecoder, load_vae
 
-dtype = {"fp32": lucid.float32, "bf16": lucid.bfloat16}[sys.argv[1] if len(sys.argv) > 1 else "fp32"]
+dtype = {"fp32": lucid.float32, "bf16": lucid.bfloat16}[
+    sys.argv[1] if len(sys.argv) > 1 else "fp32"
+]
 guard(20.0)
 vae = load_vae("metal", dtype)
 _, preset = presets.load_preset("08")
 frames = media.read_video(preset["_input_video_path"], 21, 480, 832)
 with lucid.no_grad():
-    z = vae.encode(media.frames_to_model(frames, lucid.bfloat16).to("metal")).float().permute(0, 2, 1, 3, 4)
+    z = (
+        vae.encode(media.frames_to_model(frames, lucid.bfloat16).to("metal"))
+        .float()
+        .permute(0, 2, 1, 3, 4)
+    )
     lucid.eval(z)
 lucid.metal.empty_cache()
 
@@ -38,10 +44,15 @@ def run(decoder, label):
             t0 = time.time()
             outs.append(decoder(z[:, i : i + 1]).to("cpu"))
             times.append(round(time.time() - t0, 2))
-        print(f"{label} pass {rep}: s/latent frame {times}, peak {lucid.metal.max_memory_allocated() / 1e9:.1f} GB", flush=True)
+        print(
+            f"{label} pass {rep}: s/latent frame {times}, peak {lucid.metal.max_memory_allocated() / 1e9:.1f} GB",
+            flush=True,
+        )
     return lucid.cat(outs, dim=1)
 
 
-eager = run(StreamingDecoder(vae), f"{sys.argv[1] if len(sys.argv) > 1 else 'fp32'} eager")
+eager = run(
+    StreamingDecoder(vae), f"{sys.argv[1] if len(sys.argv) > 1 else 'fp32'} eager"
+)
 compiled = run(CompiledDecoder(vae), "compiled")
 print("compiled vs eager max abs diff", (compiled - eager).abs().max().item())

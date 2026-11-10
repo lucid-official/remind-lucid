@@ -50,7 +50,9 @@ def hf_url(repo: str, filename: str, revision: str = "main") -> str:
     return f"{HF_ENDPOINT}/{repo}/resolve/{revision}/{filename}"
 
 
-_resolved: dict[str, str] = {}  # resolve URL -> signed CDN URL, so a redirect is paid once per file
+_resolved: dict[str, str] = (
+    {}
+)  # resolve URL -> signed CDN URL, so a redirect is paid once per file
 
 
 def _request(
@@ -119,7 +121,9 @@ def read_parallel(url: str, start: int, end: int) -> bytes:
     if _pool is None:
         _pool = ThreadPoolExecutor(_PARALLEL)
     cuts = list(range(start, end, _PIECE)) + [end]
-    parts = _pool.map(lambda ab: read_range(url, ab[0], ab[1]), zip(cuts[:-1], cuts[1:]))
+    parts = _pool.map(
+        lambda ab: read_range(url, ab[0], ab[1]), zip(cuts[:-1], cuts[1:])
+    )
     return b"".join(parts)
 
 

@@ -29,7 +29,9 @@ def write_png(path: str | Path, pixels: list[list[tuple[int, int, int]]]) -> Non
     Path(path).write_bytes(png)
 
 
-def layer_by_key(report: dict, chunk: int) -> tuple[list[int], list[int], list[list[float]]]:
+def layer_by_key(
+    report: dict, chunk: int
+) -> tuple[list[int], list[int], list[list[float]]]:
     """Head-averaged mass of one generated chunk: rows = logged layers, columns = key chunks."""
     layers = report["attention_mass"][str(chunk)]
     keys = report["attention_keys"][str(chunk)]

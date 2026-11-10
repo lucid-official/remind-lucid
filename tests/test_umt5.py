@@ -16,9 +16,13 @@ def test_relative_buckets_match_torch():
 @pytest.mark.parametrize("device", DEVICES)
 def test_tiny_encoder(device):
     ref = load_fixture("tiny_umt5.safetensors")
-    cfg = UMT5Config(vocab_size=100, dim=64, dim_attn=64, dim_ffn=128, num_heads=4, num_layers=2)
+    cfg = UMT5Config(
+        vocab_size=100, dim=64, dim_attn=64, dim_ffn=128, num_heads=4, num_layers=2
+    )
     model = UMT5Encoder(cfg).eval()
-    model.load_state_dict({k[6:]: v for k, v in ref.items() if k.startswith("state.")}, strict=True)
+    model.load_state_dict(
+        {k[6:]: v for k, v in ref.items() if k.startswith("state.")}, strict=True
+    )
     model.to(device)
     with lucid.no_grad():
         out = model(ref["ids"], ref["mask"])

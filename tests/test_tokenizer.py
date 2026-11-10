@@ -30,7 +30,9 @@ def test_cleaning(rows):
 
 
 def test_ids(rows, tokenizer):
-    bad = [r["text"][:40] for r in rows if tokenizer.encode_clean(r["text"]) != r["ids"]]
+    bad = [
+        r["text"][:40] for r in rows if tokenizer.encode_clean(r["text"]) != r["ids"]
+    ]
     assert not bad, bad
 
 

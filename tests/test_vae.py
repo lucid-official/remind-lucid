@@ -9,7 +9,9 @@ from remind_lucid.models.wan22_vae import VAEConfig, WanVAE, patchify, unpatchif
 
 def _tiny(ref, device):
     vae = WanVAE(VAEConfig(dim=16, dec_dim=16), scale_dtype=lucid.float32).eval()
-    vae.load_state_dict({k[6:]: v for k, v in ref.items() if k.startswith("state.")}, strict=True)
+    vae.load_state_dict(
+        {k[6:]: v for k, v in ref.items() if k.startswith("state.")}, strict=True
+    )
     return vae.to(device)
 
 
@@ -39,8 +41,12 @@ def test_decode_full_and_streamed(device):
     with lucid.no_grad():
         full = vae.decode(z)
         state = vae.new_state()
-        parts = [vae.decode_stream(z[:, :, i : i + 1], state) for i in range(z.shape[2])]
+        parts = [
+            vae.decode_stream(z[:, :, i : i + 1], state) for i in range(z.shape[2])
+        ]
         streamed = lucid.cat(parts, dim=2)
     assert max_rel(full, ref["pixels"].clamp(-1, 1)) < 1e-4
     assert [p.shape[2] for p in parts] == [1, 4, 4]
-    assert (streamed == full).all().item()  # one frame at a time is the same computation
+    assert (
+        (streamed == full).all().item()
+    )  # one frame at a time is the same computation

@@ -395,7 +395,9 @@ class WanVAE(nn.Module):
         return self.conv2.weight.dtype
 
     def _scale(self, like: Tensor) -> tuple[Tensor, Tensor]:
-        mean = lucid.tensor(LATENT_MEAN, dtype=lucid.float32, device="cpu").to(self.scale_dtype)
+        mean = lucid.tensor(LATENT_MEAN, dtype=lucid.float32, device="cpu").to(
+            self.scale_dtype
+        )
         inv_std = 1.0 / lucid.tensor(LATENT_STD, dtype=lucid.float32, device="cpu").to(self.scale_dtype)  # fmt: skip
         dev, dt = like.device.type, like.dtype
         return (

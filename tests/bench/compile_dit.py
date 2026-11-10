@@ -36,7 +36,9 @@ tk, tv = rand(1, 24, 512, 128), rand(1, 24, 512, 128)
 angle = lucid.randn(L, 64, device="metal")
 cos = lucid.cos(angle).reshape(L, 64, 1).expand(L, 64, 2).reshape(L, 128)
 sin = lucid.sin(angle).reshape(L, 64, 1).expand(L, 64, 2).reshape(L, 128)
-eye = lucid.eye(4, device="metal").reshape(1, 1, 1, 1, 4, 4).expand(1, 1, 3, 1, 4, 4) + 0.01 * lucid.randn(1, 1, 3, 1, 4, 4, device="metal")
+eye = lucid.eye(4, device="metal").reshape(1, 1, 1, 1, 4, 4).expand(
+    1, 1, 3, 1, 4, 4
+) + 0.01 * lucid.randn(1, 1, 3, 1, 4, 4, device="metal")
 base = (x, e, tk, tv, cos, sin, eye, eye)
 lucid.eval(*base)
 
@@ -66,18 +68,31 @@ with lucid.no_grad():
         else:
             hk, hv = rand(1, 24, hist, 128), rand(1, 24, hist, 128)
             lucid.eval(hk, hv)
-            args, eager_fn, programs = (*base, hk, hv), block.step, {"static": static_hist, "dynamic": dyn_hist}
+            args, eager_fn, programs = (
+                (*base, hk, hv),
+                block.step,
+                {"static": static_hist, "dynamic": dyn_hist},
+            )
         _, eager_ms, ref = timed(eager_fn, args)
         line = f"history {hist:5d}: eager {eager_ms:7.1f} ms"
         for label, program in programs.items():
             try:
                 first, ms, out = timed(program, args)
-                diff = (out.float() - ref.float()).abs().max().item() / ref.float().abs().max().item()
+                diff = (
+                    out.float() - ref.float()
+                ).abs().max().item() / ref.float().abs().max().item()
                 line += f" | {label} {ms:7.1f} ms (first call {first:8.0f} ms, max rel diff {diff:.1e})"
             except Exception as exc:
                 line += f" | {label} failed: {type(exc).__name__}: {str(exc)[:70]}"
-        print(line + f" | in use {lucid.metal.memory_allocated() / 1e9:.1f} GB", flush=True)
-for label, program in (("static fresh", static_fresh), ("static history", static_hist), ("dynamic history", dyn_hist)):
+        print(
+            line + f" | in use {lucid.metal.memory_allocated() / 1e9:.1f} GB",
+            flush=True,
+        )
+for label, program in (
+    ("static fresh", static_fresh),
+    ("static history", static_hist),
+    ("dynamic history", dyn_hist),
+):
     try:
         print(label, "cache entries:", program.cache_info()["entries"])
     except Exception as exc:

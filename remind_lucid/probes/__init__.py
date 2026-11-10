@@ -98,7 +98,9 @@ class ProbeSet:
         self._hidden: set[int] = set()
         self._latents: dict[int, Tensor] = {}
         self._chunk = 0
-        self.mass: dict[int, dict[int, list]] = {}  # chunk -> layer -> [heads][key chunks]
+        self.mass: dict[int, dict[int, list]] = (
+            {}
+        )  # chunk -> layer -> [heads][key chunks]
         self._acc: dict[int, list] = {}
         if self.attention_layers:
             model = pipeline.generator
@@ -166,9 +168,15 @@ class ProbeSet:
         computation in fp32 over slices of queries.
         """
         out = F.scaled_dot_product_attention(q, k, v)
-        if self._cache.entries[0] and k.shape[2] > own and getattr(self, "_logging", True):
+        if (
+            self._cache.entries[0]
+            and k.shape[2] > own
+            and getattr(self, "_logging", True)
+        ):
             keys = self._cache.visible()
-            sizes = [self._cache.entries[block][key][0].shape[2] for key in keys] + [own]
+            sizes = [self._cache.entries[block][key][0].shape[2] for key in keys] + [
+                own
+            ]
             scale = q.shape[-1] ** -0.5
             kf = k.float().swapaxes(-1, -2)
             heads = q.shape[1]
@@ -178,7 +186,9 @@ class ProbeSet:
                 attn = F.softmax(lucid.matmul(q[:, :, start : start + step].float(), kf) * scale, dim=-1)  # fmt: skip
                 offset, cols = 0, []
                 for size in sizes:
-                    cols.append(attn[..., offset : offset + size].sum(dim=-1).sum(dim=-1)[0])  # (heads,)
+                    cols.append(
+                        attn[..., offset : offset + size].sum(dim=-1).sum(dim=-1)[0]
+                    )  # (heads,)
                     offset += size
                 totals = totals + lucid.stack(cols, dim=-1)
                 lucid.eval(totals)
@@ -198,5 +208,7 @@ class ProbeSet:
         return {
             "config": self.to_dict(),
             "attention_mass": {str(c): {str(l): rows for l, rows in layers.items()} for c, layers in self.mass.items()},  # fmt: skip
-            "attention_keys": {str(c): keys for c, keys in getattr(self, "keys", {}).items()},
+            "attention_keys": {
+                str(c): keys for c, keys in getattr(self, "keys", {}).items()
+            },
         }

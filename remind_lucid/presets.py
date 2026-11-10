@@ -48,7 +48,9 @@ def resolve_preset_path(name_or_path: str | Path) -> Path:
         return path.resolve()
     matches = [p for p in sorted(PRESET_DIR.glob("*.json")) if p.stem == str(name_or_path) or p.stem.startswith(f"{name_or_path}_")]  # fmt: skip
     if len(matches) != 1:
-        raise FileNotFoundError(f"no preset {name_or_path!r}; bundled: {preset_names()}")
+        raise FileNotFoundError(
+            f"no preset {name_or_path!r}; bundled: {preset_names()}"
+        )
     return matches[0]
 
 
@@ -184,7 +186,9 @@ def build_prompt(prompt: str, control: dict, *, pixel_frames: int, latent_frames
     explicit = control.get("prompts")
     if explicit is not None:
         if len(explicit) != num_chunks:
-            raise ValueError(f"expected {num_chunks} chunk prompts, got {len(explicit)}")
+            raise ValueError(
+                f"expected {num_chunks} chunk prompts, got {len(explicit)}"
+            )
         return [str(p) for p in explicit]
     args = (pixel_frames, latent_frames, chunk_size)
     if kind == "clean":
@@ -192,7 +196,9 @@ def build_prompt(prompt: str, control: dict, *, pixel_frames: int, latent_frames
     if kind == "camera":
         if control.get("_trajectory_path"):
             return [str(prompt)] * num_chunks
-        peak = int(round((pixel_frames - 1) * float(control.get("peak_fraction", 0.50))))
+        peak = int(
+            round((pixel_frames - 1) * float(control.get("peak_fraction", 0.50)))
+        )
         back = int(round((pixel_frames - 1) * float(control.get("return_fraction", 0.86))))  # fmt: skip
         degrees = float(control.get("degrees", 20.0))
         if str(control.get("axis", "yaw")) == "yaw":

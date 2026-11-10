@@ -119,7 +119,9 @@ def to_safetensors(src, dest: Path, rename=lambda name: name) -> None:
         name: archive.getinfo(f"{root}/data/{ref.storage.key}").header_offset
         for name, ref in refs.items()
     }
-    for name, ref in sorted(refs.items(), key=lambda item: (position[item[0]], item[1].offset)):
+    for name, ref in sorted(
+        refs.items(), key=lambda item: (position[item[0]], item[1].offset)
+    ):
         if not ref.is_contiguous():
             raise ValueError(f"{name}: non-contiguous tensors are not supported")
         nbytes = ref.numel * ref.storage.itemsize

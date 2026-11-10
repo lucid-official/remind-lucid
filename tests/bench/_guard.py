@@ -13,7 +13,9 @@ def guard(limit_gb: float = 20.0) -> None:
         while True:
             used = lucid.metal.memory_allocated() / 1e9
             if used > limit_gb:
-                sys.stdout.write(f"\nGUARD: {used:.1f} GB in use > {limit_gb} GB, aborting\n")
+                sys.stdout.write(
+                    f"\nGUARD: {used:.1f} GB in use > {limit_gb} GB, aborting\n"
+                )
                 sys.stdout.flush()
                 os._exit(3)
             time.sleep(0.1)

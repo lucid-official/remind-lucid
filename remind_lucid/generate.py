@@ -30,7 +30,13 @@ from tqdm import tqdm
 
 from remind_lucid import catalog, presets
 from remind_lucid.io.media import VideoWriter, to_uint8_frames
-from remind_lucid.pipeline import DTYPES, Job, NoiseSource, ReMindPipeline, peak_memory_gb
+from remind_lucid.pipeline import (
+    DTYPES,
+    Job,
+    NoiseSource,
+    ReMindPipeline,
+    peak_memory_gb,
+)
 
 
 def build_preset(args) -> tuple[Path, dict]:
@@ -68,7 +74,9 @@ def build_preset(args) -> tuple[Path, dict]:
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     p.add_argument("--preset", help=f"bundled preset (name or number prefix) or a preset .json; bundled: {', '.join(presets.preset_names())}")  # fmt: skip
-    p.add_argument("--image", help="custom I2V: first image (resized to 832x480 with Lanczos)")
+    p.add_argument(
+        "--image", help="custom I2V: first image (resized to 832x480 with Lanczos)"
+    )
     p.add_argument("--video", help="custom V2V: a video whose first 21 frames seed 6 latent frames")  # fmt: skip
     p.add_argument("--prompt", help="content-only temporal caption (see the reference's docs/inference.md)")  # fmt: skip
     p.add_argument("--prompts-file", help="7 chunk-local prompts, one per line; bypasses the control schedule")  # fmt: skip
@@ -89,7 +97,11 @@ def main() -> None:
         raise SystemExit("weights are missing; run `python -m remind_lucid.download`")
 
     job = Job.from_preset(preset_path, preset, args.seed)
-    out = (args.output or Path("outputs") / f"{preset['name']}.mp4").expanduser().resolve()
+    out = (
+        (args.output or Path("outputs") / f"{preset['name']}.mp4")
+        .expanduser()
+        .resolve()
+    )
     t_start = time.time()
     lucid.metal.reset_peak_memory_stats()
     pipe = ReMindPipeline(dtype=DTYPES[args.dtype], accelerate=args.compile, log=lambda m: tqdm.write(m))  # fmt: skip

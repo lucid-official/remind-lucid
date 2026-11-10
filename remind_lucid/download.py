@@ -77,14 +77,18 @@ def fetch_all(progress: hub.Progress | None = None) -> None:
     fetch_remind(progress)
     extra = fetch_base_extra(progress)
     if extra:
-        print(f"  fetched {len(extra)} Wan base tensors the generator lacks", flush=True)
+        print(
+            f"  fetched {len(extra)} Wan base tensors the generator lacks", flush=True
+        )
 
 
 def print_status() -> int:
     """Print the per-file table; return the bytes still to download."""
     missing = 0
     for row in catalog.status():
-        missing += max(0, row["size"] - row["have"]) if row["state"] != "verified" else 0
+        missing += (
+            max(0, row["size"] - row["have"]) if row["state"] != "verified" else 0
+        )
         print(
             f"  {row['state']:<10} {row['have'] / 1e9:6.2f}/{row['size'] / 1e9:5.2f} GB  "
             f"{row['label']:<32} <- {row['source']}"

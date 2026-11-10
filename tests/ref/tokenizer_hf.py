@@ -13,8 +13,14 @@ import json
 
 from wan.modules.tokenizers import HuggingfaceTokenizer
 
-tok = HuggingfaceTokenizer(name=str(_upstream.CHECKPOINTS / "Wan2.2-TI2V-5B" / "google" / "umt5-xxl") + "/", seq_len=512, clean="whitespace")
-dry = json.loads((_upstream.FIXTURES / "presets_dry_run.json").read_text(encoding="utf-8"))
+tok = HuggingfaceTokenizer(
+    name=str(_upstream.CHECKPOINTS / "Wan2.2-TI2V-5B" / "google" / "umt5-xxl") + "/",
+    seq_len=512,
+    clean="whitespace",
+)
+dry = json.loads(
+    (_upstream.FIXTURES / "presets_dry_run.json").read_text(encoding="utf-8")
+)
 prompts = sorted({p for case in dry.values() for p in case["prompt_schedule"]})
 prompts += [
     "",
@@ -38,6 +44,15 @@ prompts += [
 rows = []
 for text in prompts:
     ids, mask = tok([text], return_mask=True, add_special_tokens=True)
-    rows.append({"text": text, "clean": tok._clean(text), "ids": ids[0].tolist()[: int(mask[0].sum())], "length": int(mask[0].sum())})
-(_upstream.FIXTURES / "tokenizer_hf.json").write_text(json.dumps(rows, ensure_ascii=False, indent=0) + "\n", encoding="utf-8")
+    rows.append(
+        {
+            "text": text,
+            "clean": tok._clean(text),
+            "ids": ids[0].tolist()[: int(mask[0].sum())],
+            "length": int(mask[0].sum()),
+        }
+    )
+(_upstream.FIXTURES / "tokenizer_hf.json").write_text(
+    json.dumps(rows, ensure_ascii=False, indent=0) + "\n", encoding="utf-8"
+)
 print(len(rows), "prompts; max length", max(r["length"] for r in rows))

@@ -21,10 +21,15 @@ import lucid
 
 from remind_lucid import catalog, presets
 from remind_lucid.io.media import VideoWriter, make_strip, to_uint8_frames
-from remind_lucid.pipeline import DTYPES, Job, NoiseSource, ReMindPipeline, peak_memory_gb
+from remind_lucid.pipeline import (
+    DTYPES,
+    Job,
+    NoiseSource,
+    ReMindPipeline,
+    peak_memory_gb,
+)
 from remind_lucid.probes import ProbeSet, sweeps
 from remind_lucid.probes.heatmap import render as render_heatmap
-
 
 def run_one(pipe: ReMindPipeline, preset: dict, probes: dict | None, out_dir: Path, seed: int | None = None, log=print) -> dict:  # fmt: skip
     """One generation with the resident pipeline. Returns its metadata (also written next to the video)."""
@@ -43,7 +48,9 @@ def run_one(pipe: ReMindPipeline, preset: dict, probes: dict | None, out_dir: Pa
     writer = VideoWriter(video, job.width, job.height, fps=job.fps)
     decode_seconds = 0.0
     try:
-        for chunk in pipe.rollout(job, features, source, NoiseSource(job.seed, pipe.dtype)):
+        for chunk in pipe.rollout(
+            job, features, source, NoiseSource(job.seed, pipe.dtype)
+        ):
             t0 = time.time()
             writer.write(to_uint8_frames(decode(chunk.latents)))
             decode_seconds += time.time() - t0
@@ -115,7 +122,9 @@ def main() -> None:
             for text in args.sets.split(";"):
                 drop = [] if text.strip() == "-" else _ints(text)
                 variant = {k: v for k, v in base.items() if not k.startswith("_")}
-                variant["name"] = f"{base['name']}_drop{'-'.join(map(str, drop)) or 'none'}"
+                variant["name"] = (
+                    f"{base['name']}_drop{'-'.join(map(str, drop)) or 'none'}"
+                )
                 variant["sweep"] = {"kind": "knockout", "drop": drop, "at_chunk": args.from_chunk}  # fmt: skip
                 config = dict(hooks)
                 if drop:

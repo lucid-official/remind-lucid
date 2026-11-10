@@ -32,14 +32,28 @@ def in_use() -> float:
 angle = lucid.randn(L, 64, device="metal")
 cos = lucid.cos(angle).reshape(L, 64, 1).expand(L, 64, 2).reshape(L, 128)
 sin = lucid.sin(angle).reshape(L, 64, 1).expand(L, 64, 2).reshape(L, 128)
-eye = lucid.eye(4, device="metal").reshape(1, 1, 1, 1, 4, 4).expand(1, 1, 3, 1, 4, 4) + 0.0
-base = (rand(1, L, 3072), rand(1, 3, 6, 3072) * 0.1, rand(1, 24, 512, 128), rand(1, 24, 512, 128), cos, sin, eye, eye)
+eye = (
+    lucid.eye(4, device="metal").reshape(1, 1, 1, 1, 4, 4).expand(1, 1, 3, 1, 4, 4)
+    + 0.0
+)
+base = (
+    rand(1, L, 3072),
+    rand(1, 3, 6, 3072) * 0.1,
+    rand(1, 24, 512, 128),
+    rand(1, 24, 512, 128),
+    cos,
+    sin,
+    eye,
+    eye,
+)
 lucid.eval(*base)
 weights = sum(p.numel() for p in block.parameters()) * 2 / 1e9
 with lucid.no_grad():
     lucid.eval(*block.step(*base))
     lucid.metal.empty_cache()
-    print(f"block weights (bf16): {weights:.2f} GB; in use before compiling: {in_use():.2f} GB")
+    print(
+        f"block weights (bf16): {weights:.2f} GB; in use before compiling: {in_use():.2f} GB"
+    )
     program = lucid.compile(_BlockHistory(block).eval(), dynamic=False)
     for hist in (1170, 2340, 3510, 4680):
         hk, hv = rand(1, 24, hist, 128), rand(1, 24, hist, 128)
@@ -49,7 +63,11 @@ with lucid.no_grad():
         lucid.eval(*out)
         del out, hk, hv
         lucid.metal.empty_cache()
-        print(f"signature history={hist}: in use {in_use():.2f} GB (+{in_use() - before:.2f}), cache entries {program.cache_info()['entries']}")
+        print(
+            f"signature history={hist}: in use {in_use():.2f} GB (+{in_use() - before:.2f}), cache entries {program.cache_info()['entries']}"
+        )
     program.clear_cache()
     lucid.metal.empty_cache()
-    print(f"after clear_cache(): in use {in_use():.2f} GB, cache entries {program.cache_info()['entries']}")
+    print(
+        f"after clear_cache(): in use {in_use():.2f} GB, cache entries {program.cache_info()['entries']}"
+    )

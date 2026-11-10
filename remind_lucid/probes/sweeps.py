@@ -29,7 +29,9 @@ def interruption_phases(num_chunks: int, start_chunk: int, hold_chunks: int, rec
     phases = ["none"] * start_chunk + ["enter"] + ["hold"] * hold_chunks + ["exit"]
     if len(phases) > num_chunks:
         raise ValueError(f"interruption of {hold_chunks} hold chunks from chunk {start_chunk} does not fit {num_chunks} chunks")  # fmt: skip
-    phases += ["recover"] * min(recovery_chunks, num_chunks - len(phases))  # the tail may leave no room to recover
+    phases += ["recover"] * min(
+        recovery_chunks, num_chunks - len(phases)
+    )  # the tail may leave no room to recover
     return phases + ["none"] * (num_chunks - len(phases))
 
 

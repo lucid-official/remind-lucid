@@ -37,7 +37,9 @@ def ref():
 def write_report():
     yield
     (ROOT / "outputs").mkdir(exist_ok=True)
-    (ROOT / "outputs" / "vae_report.json").write_text(json.dumps(REPORT, indent=2) + "\n")
+    (ROOT / "outputs" / "vae_report.json").write_text(
+        json.dumps(REPORT, indent=2) + "\n"
+    )
 
 
 def test_inputs_are_decoded_identically(ref):
@@ -96,13 +98,19 @@ def test_crop_bf16(ref):
     z_ref = ref["crop.fp32.latent"].permute(0, 2, 1, 3, 4).to("metal")
     out = {
         "upstream_bf16_vs_upstream_fp32": {
-            "latent_cosine": round(cosine(ref["crop.bf16.latent"], ref["crop.fp32.latent"]), 6),
-            "decode_psnr_db": round(psnr(ref["crop.bf16.pixels"], ref["crop.fp32.pixels"]), 2),
+            "latent_cosine": round(
+                cosine(ref["crop.bf16.latent"], ref["crop.fp32.latent"]), 6
+            ),
+            "decode_psnr_db": round(
+                psnr(ref["crop.bf16.pixels"], ref["crop.fp32.pixels"]), 2
+            ),
         }
     }
     for name, dtype in (("fp32", lucid.float32), ("bf16", lucid.bfloat16)):
         vae = load_vae("metal", dtype)
-        vae.scale_dtype = dtype  # as upstream: the constants in the dtype the VAE runs in
+        vae.scale_dtype = (
+            dtype  # as upstream: the constants in the dtype the VAE runs in
+        )
         with lucid.no_grad():
             z = vae.encode(crop).float().permute(0, 2, 1, 3, 4)
             pix = vae.decode(z_ref.to(dtype)).permute(0, 2, 1, 3, 4)
@@ -110,7 +118,9 @@ def test_crop_bf16(ref):
         for other in ("fp32", "bf16"):
             out[f"lucid_{name}_vs_upstream_{other}"] = {
                 "latent_cosine": round(cosine(z, ref[f"crop.{other}.latent"]), 6),
-                "decode_psnr_db": round(psnr(pix, ref[f"crop.{other}.pixels"].clamp(-1, 1)), 2),
+                "decode_psnr_db": round(
+                    psnr(pix, ref[f"crop.{other}.pixels"].clamp(-1, 1)), 2
+                ),
             }
         del vae
         lucid.metal.empty_cache()

@@ -12,19 +12,25 @@ from conftest import DEVICES, load_fixture, max_rel
 from remind_lucid import camera
 from remind_lucid.models.wan_dit import CausalWanModel, DiTConfig
 
-CFG = DiTConfig(dim=192, ffn_dim=256, text_dim=64, text_len=32, num_heads=6, num_layers=2)
+CFG = DiTConfig(
+    dim=192, ffn_dim=256, text_dim=64, text_len=32, num_heads=6, num_layers=2
+)
 F_, GRID = 3, (4, 6)
 
 
 def _model(ref, device):
     model = CausalWanModel(CFG).eval()
-    model.load_state_dict({k[6:]: v for k, v in ref.items() if k.startswith("state.")}, strict=True)
+    model.load_state_dict(
+        {k[6:]: v for k, v in ref.items() if k.startswith("state.")}, strict=True
+    )
     return model.to(device)
 
 
 def _geom(model, ref, chunk, positions=None):
     lo = chunk * F_
-    cam = camera.prepare_chunk(ref["viewmats"][:, lo : lo + F_], ref["Ks"][:, lo : lo + F_], GRID[1] * 2 * 16.0)
+    cam = camera.prepare_chunk(
+        ref["viewmats"][:, lo : lo + F_], ref["Ks"][:, lo : lo + F_], GRID[1] * 2 * 16.0
+    )
     return cam, model.geometry(positions or list(range(lo, lo + F_)), cam, GRID)
 
 
@@ -45,7 +51,10 @@ def test_rollout_calls(device):
     with lucid.no_grad():
         embedded = model.embed_text(ref["context"][0].to(device))
         assert max_rel(embedded[0:1], ref["c0_denoise.context"][0]) < 1e-5
-        ctx = [model.text_context(ref["context"][0][i : i + 1].to(device)) for i in range(2)]
+        ctx = [
+            model.text_context(ref["context"][0][i : i + 1].to(device))
+            for i in range(2)
+        ]
         x0, x1 = ref["x0"].to(device), ref["x1"].to(device)
         _, g0 = _geom(model, ref, 0)
         _, g1 = _geom(model, ref, 1)

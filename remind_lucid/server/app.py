@@ -32,7 +32,14 @@ import lucid
 
 from remind_lucid import catalog, download, presets
 from remind_lucid.io.media import VideoWriter, encode_jpeg, to_uint8_frames
-from remind_lucid.pipeline import DTYPES, Job, NoiseSource, ReMindPipeline, memory_gb, peak_memory_gb
+from remind_lucid.pipeline import (
+    DTYPES,
+    Job,
+    NoiseSource,
+    ReMindPipeline,
+    memory_gb,
+    peak_memory_gb,
+)
 from remind_lucid.probes import ProbeSet
 from remind_lucid.probes import sweeps
 from remind_lucid.probes.heatmap import render as render_heatmap
@@ -280,7 +287,9 @@ class Engine:
         )
         if probes is not None and probes.mass:
             report = probes.report()
-            (run.folder / "probes.json").write_text(json.dumps(report), encoding="utf-8")
+            (run.folder / "probes.json").write_text(
+                json.dumps(report), encoding="utf-8"
+            )
             last = max(int(c) for c in report["attention_mass"])
             render_heatmap(report, last, run.folder / "heatmap.png")
             metadata["attention_report"] = True
@@ -327,7 +336,7 @@ def _history() -> list[dict]:
     for meta in sorted(OUTPUTS.glob("*/metadata.json"), key=lambda p: p.stat().st_mtime, reverse=True):  # fmt: skip
         try:
             rows.append(json.loads(meta.read_text(encoding="utf-8")))
-        except (OSError, ValueError):
+        except OSError, ValueError:
             continue
     return rows
 
@@ -351,7 +360,9 @@ def _info() -> dict:
         "presets": cases,
         "trajectories": presets.trajectory_index(),
         "phases": list(PHASES),
-        "device": lucid.metal.get_device_name() if lucid.metal.is_available() else "cpu",
+        "device": (
+            lucid.metal.get_device_name() if lucid.metal.is_available() else "cpu"
+        ),
         "lucid": lucid.__version__,
         "ready": catalog.ready(),
         "steps": list(catalog.DENOISING_STEPS),
@@ -395,7 +406,7 @@ class Handler(BaseHTTPRequestHandler):
             fh.seek(start)
             try:
                 self.wfile.write(fh.read(end - start + 1))
-            except (BrokenPipeError, ConnectionResetError):
+            except BrokenPipeError, ConnectionResetError:
                 pass
 
     def _sse(self, next_event) -> None:
@@ -409,7 +420,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 self.wfile.write(f"data: {json.dumps(event, default=str)}\n\n".encode())
                 self.wfile.flush()
-            except (BrokenPipeError, ConnectionResetError):
+            except BrokenPipeError, ConnectionResetError:
                 return
             if event["type"] == "end":
                 return
@@ -457,7 +468,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if url.path == "/api/validate":
                 preset = build_preset(body)
-                summary = presets.dry_run_summary(body.get("preset") or "custom", preset)
+                summary = presets.dry_run_summary(
+                    body.get("preset") or "custom", preset
+                )
                 kind = preset["control"]["kind"]
                 summary["phases"] = phases_of(str(preset["prompt"]), kind, summary["prompt_schedule"], preset["control"].get("params"), preset["control"].get("meta"))  # fmt: skip
                 return self._json({"ok": True, "summary": summary})
@@ -487,7 +500,9 @@ class Handler(BaseHTTPRequestHandler):
             if url.path == "/api/weights/download":
                 return self._json({"started": engine.start_download()})
         except (ValueError, FileNotFoundError, KeyError) as exc:
-            return self._json({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, 400)
+            return self._json(
+                {"ok": False, "error": f"{type(exc).__name__}: {exc}"}, 400
+            )
         self.send_error(404)
 
 
@@ -498,7 +513,7 @@ def _tailscale_ip() -> str | None:
     try:
         out = subprocess.run([exe, "ip", "-4"], capture_output=True, text=True, timeout=5).stdout.split()  # fmt: skip
         return out[0] if out else None
-    except (OSError, subprocess.TimeoutExpired):
+    except OSError, subprocess.TimeoutExpired:
         return None
 
 

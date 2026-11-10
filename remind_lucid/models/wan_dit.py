@@ -73,14 +73,18 @@ def sinusoidal_embedding(dim: int, positions: list[float]) -> Tensor:
     """``sinusoidal_embedding_1d``: ``[cos, sin]`` of ``pos * 10000^(-i / half)`` in float64 (CPU)."""
     half = dim // 2
     pos = lucid.tensor(positions, dtype=lucid.float64, device="cpu")
-    inv = lucid.pow(10000.0, -lucid.arange(half, dtype=lucid.float64, device="cpu") / half)
+    inv = lucid.pow(
+        10000.0, -lucid.arange(half, dtype=lucid.float64, device="cpu") / half
+    )
     angle = pos.reshape(-1, 1) * inv.reshape(1, -1)
     return lucid.cat([lucid.cos(angle), lucid.sin(angle)], dim=1)
 
 
 def rope_angles(max_len: int, dim: int, theta: float = 10000.0) -> Tensor:
     """The angles of ``rope_params``: ``pos / theta^(2i / dim)`` in float64, ``(max_len, dim / 2)``."""
-    inv = 1.0 / lucid.pow(theta, lucid.arange(0, dim, 2, dtype=lucid.float64, device="cpu") / dim)
+    inv = 1.0 / lucid.pow(
+        theta, lucid.arange(0, dim, 2, dtype=lucid.float64, device="cpu") / dim
+    )
     return lucid.arange(max_len, dtype=lucid.float64, device="cpu").reshape(-1, 1) * inv.reshape(1, -1)  # fmt: skip
 
 
@@ -252,7 +256,9 @@ class CausalSelfAttention(nn.Module):
         self.prope_proj = LoRALinear(dim, dim)
         self.value_proj = LoRALinear(dim, dim)
         self.camera_phase_mlp = CameraPhaseMLP(cfg.pose_dim, cfg.head_dim // 2)
-        self.probe = None  # research hook (remind_lucid.probes); None = the reference path
+        self.probe = (
+            None  # research hook (remind_lucid.probes); None = the reference path
+        )
 
     def qkv(self, x: Tensor, cos: Tensor, sin: Tensor, p_inv_t: Tensor, frames: int):
         """Rotated queries and keys and the camera-augmented values, each ``(B, heads, L, d)``."""
@@ -350,11 +356,15 @@ class AttentionBlock(nn.Module):
             return (h.reshape(b, f, tpf, d) + y.reshape(b, f, tpf, d) * gate).reshape(b, l, d)  # fmt: skip
 
         attn = self.self_attn
-        q, k, v = attn.qkv(modulate(self.norm1(x), mod[1], mod[0]), cos, sin, p_inv_t, f)
+        q, k, v = attn.qkv(
+            modulate(self.norm1(x), mod[1], mod[0]), cos, sin, p_inv_t, f
+        )
         if hist_k is None:
             k_full, v_full = k, v
         else:
-            k_full, v_full = lucid.cat([hist_k, k], dim=2), lucid.cat([hist_v, v], dim=2)
+            k_full, v_full = lucid.cat([hist_k, k], dim=2), lucid.cat(
+                [hist_v, v], dim=2
+            )
         x = residual(x, attn.attend(q, k_full, v_full, p_t, f, block), mod[2])
         n = text_k.shape[0]
         cross = self.cross_attn(self.norm3(x).reshape(b * n, l // n, d), text_k, text_v)
@@ -472,9 +482,13 @@ class CausalWanModel(nn.Module):
         if self._phase_weights is None:
             self._phase_weights = lucid.stack([blk.self_attn.camera_phase_mlp.proj.weight.to("cpu") for blk in self.blocks])  # fmt: skip
         weights = self._phase_weights  # (blocks, 64, 14) in the model dtype
-        pose = camera.pose.to(weights.dtype)[0]  # (F, 14), rounded as ``pose_c.to(w.dtype)``
+        pose = camera.pose.to(weights.dtype)[
+            0
+        ]  # (F, 14), rounded as ``pose_c.to(w.dtype)``
         phi = lucid.matmul(pose.double().unsqueeze(0), weights.double().swapaxes(1, 2))
-        phi = phi.to(weights.dtype).float()  # (blocks, F, 64): F.linear in the weight dtype, then .float()
+        phi = phi.to(
+            weights.dtype
+        ).float()  # (blocks, F, 64): F.linear in the weight dtype, then .float()
         pc, ps = lucid.cos(phi).double().unsqueeze(2), lucid.sin(phi).double().unsqueeze(2)  # fmt: skip
         cos = (base_cos.unsqueeze(0) * pc - base_sin.unsqueeze(0) * ps).float()
         sin = (base_sin.unsqueeze(0) * pc + base_cos.unsqueeze(0) * ps).float()
@@ -576,7 +590,9 @@ class CausalWanModel(nn.Module):
         e, e0 = self.embed_time(timesteps)
         if taps is not None:
             taps["patch"], taps["e"] = tokens, e
-        runner = self.runner if (self.runner is not None and not self._probing()) else None
+        runner = (
+            self.runner if (self.runner is not None and not self._probing()) else None
+        )
         for i, block in enumerate(self.blocks):
             # A commit pass attends to the chunk alone and caches its K/V; a
             # denoising step reads the history.

@@ -77,7 +77,9 @@ class PromptEncoder:
     def cached(self, prompts: Sequence[str]) -> bool:
         """Whether every prompt's features are on disk (UMT5 would not be loaded)."""
         name = str(self.dtype).rsplit(".", 1)[-1]
-        return self.use_cache and all(_cache_path(str(p), name).exists() for p in prompts)
+        return self.use_cache and all(
+            _cache_path(str(p), name).exists() for p in prompts
+        )
 
     def release(self) -> None:
         """Drop the encoder (staged residency: it is not needed once prompts are encoded)."""

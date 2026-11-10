@@ -18,7 +18,9 @@ REFERENCE = ROOT / "reference"
 FIXTURES = ROOT / "tests" / "fixtures"
 CHECKPOINTS = Path(os.environ.get("REMIND_LUCID_CHECKPOINTS", ROOT / "checkpoints"))
 
-os.environ.setdefault("DISABLE_FLEX_COMPILE", "1")  # training-only kernel; keep it eager
+os.environ.setdefault(
+    "DISABLE_FLEX_COMPILE", "1"
+)  # training-only kernel; keep it eager
 os.environ.setdefault("TORCH_NUM_THREADS", str(os.cpu_count() or 8))
 
 import torch  # noqa: E402
@@ -41,7 +43,9 @@ def fp32_attention() -> None:
     import wan.modules.model as model
 
     def attention(q, k, v, *args, **kwargs):
-        out = F.scaled_dot_product_attention(q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2))
+        out = F.scaled_dot_product_attention(
+            q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
+        )
         return out.transpose(1, 2).contiguous()
 
     causal_model.attention = attention

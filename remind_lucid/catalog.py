@@ -31,7 +31,9 @@ GENERATOR_FILE = "ReMind-5B.safetensors"
 LORA_FILE = "ReMind-5b-dmd-ema.safetensors"
 T5_FILE = "models_t5_umt5-xxl-enc-bf16.pth"
 VAE_FILE = "Wan2.2_VAE.pth"
-WAN_SHARDS = [f"diffusion_pytorch_model-0000{i}-of-00003.safetensors" for i in (1, 2, 3)]
+WAN_SHARDS = [
+    f"diffusion_pytorch_model-0000{i}-of-00003.safetensors" for i in (1, 2, 3)
+]
 TOKENIZER_FILES = ["tokenizer.json", "tokenizer_config.json", "special_tokens_map.json"]
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -42,12 +44,19 @@ DENOISING_STEPS = (1000, 938, 833, 625)
 TIMESTEP_SHIFT = 5.0
 NUM_TRAIN_TIMESTEPS = 1000
 NUM_FRAME_PER_BLOCK = 3
-FILTER_LIST = ("img_emb.", "cross_attn.k_img", "cross_attn.v_img", "cross_attn.norm_k_img")
+FILTER_LIST = (
+    "img_emb.",
+    "cross_attn.k_img",
+    "cross_attn.v_img",
+    "cross_attn.norm_k_img",
+)
 LORA_RANK = 128
 LORA_ALPHA = 128
 # Present in the config but never read on the DMD inference path (see docs/PORTING_PLAN.md).
 GUIDANCE_SCALE = 3.0
-NEGATIVE_PROMPT = "blurry, low quality, worst quality, ugly, deformed, watermark, text, static"
+NEGATIVE_PROMPT = (
+    "blurry, low quality, worst quality, ugly, deformed, watermark, text, static"
+)
 
 
 def remind_dir() -> Path:
@@ -166,7 +175,5 @@ def base_keys_needed(generator_keys, base_keys) -> list[str]:
     """Wan base tensors that survive ``filter_list`` and that the ReMind generator does not overwrite."""
     have = {clean_key(k) for k in generator_keys}
     return [
-        k
-        for k in base_keys
-        if not any(s in k for s in FILTER_LIST) and k not in have
+        k for k in base_keys if not any(s in k for s in FILTER_LIST) and k not in have
     ]

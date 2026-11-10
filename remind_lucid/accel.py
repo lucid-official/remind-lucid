@@ -20,13 +20,21 @@ os.environ.setdefault("LUCID_COMPILE_MAX_CACHE", "256")
 import lucid  # noqa: E402
 import lucid.nn as nn  # noqa: E402
 
-from remind_lucid.models.wan22_vae import CausalConv3d, StreamState, WanVAE, _run, unpatchify  # noqa: E402
+from remind_lucid.models.wan22_vae import (
+    CausalConv3d,
+    StreamState,
+    WanVAE,
+    _run,
+    unpatchify,
+)  # noqa: E402
 
 Tensor = lucid.Tensor
 
 
 def _history_slots(vae: WanVAE) -> list[CausalConv3d]:
-    return [m for m in vae.decoder.modules() if isinstance(m, CausalConv3d) and m.time_pad]
+    return [
+        m for m in vae.decoder.modules() if isinstance(m, CausalConv3d) and m.time_pad
+    ]
 
 
 class _DecodeFirst(nn.Module):
@@ -113,7 +121,9 @@ class _BlockHistory(nn.Module):
         self.block = block
 
     def forward(self, x, e, text_k, text_v, cos, sin, p_t, p_inv_t, hist_k, hist_v):
-        return self.block.step(x, e, text_k, text_v, cos, sin, p_t, p_inv_t, hist_k, hist_v)
+        return self.block.step(
+            x, e, text_k, text_v, cos, sin, p_t, p_inv_t, hist_k, hist_v
+        )
 
 
 class BlockPrograms:
@@ -139,7 +149,11 @@ class BlockPrograms:
     def __call__(self, index: int, args: tuple, hist):
         if index >= len(self.fresh):
             block = self.model.blocks[index]
-            return block.step(*args) if hist is None else block.step(*args, hist[0], hist[1])
+            return (
+                block.step(*args)
+                if hist is None
+                else block.step(*args, hist[0], hist[1])
+            )
         if hist is None:
             return self.fresh[index](*args)
         return self.history[index](*args, hist[0], hist[1])

@@ -26,10 +26,15 @@ from remind_lucid.text.encoder import PromptEncoder
 PRESET = "01_latte_occluder_recovery"
 FIXTURE = FIXTURES / f"remind_upstream_{PRESET}_large.safetensors"
 COMPILE = os.environ.get("REMIND_LUCID_COMPILE") == "1"
-REPORT = ROOT / "outputs" / ("parity_report_compiled.json" if COMPILE else "parity_report.json")
+REPORT = (
+    ROOT
+    / "outputs"
+    / ("parity_report_compiled.json" if COMPILE else "parity_report.json")
+)
 
 pytestmark = pytest.mark.skipif(
-    not (FIXTURE.exists() and catalog.ready()), reason="needs the released weights and tests/ref/remind_upstream.py"
+    not (FIXTURE.exists() and catalog.ready()),
+    reason="needs the released weights and tests/ref/remind_upstream.py",
 )
 
 
@@ -76,7 +81,9 @@ def write_report():
 
 
 def record(name: str, **values) -> None:
-    State.report[name] = {k: (round(v, 6) if isinstance(v, float) else v) for k, v in values.items()}
+    State.report[name] = {
+        k: (round(v, 6) if isinstance(v, float) else v) for k, v in values.items()
+    }
 
 
 def test_cameras(ref, job):
@@ -94,8 +101,14 @@ def test_umt5_features(ref, meta, job):
     for i in range(len(prompts)):
         worst_cos = min(worst_cos, cosine(ours[i], ref[f"t5_{i}"]))
         worst_rel = max(worst_rel, max_rel(ours[i], ref[f"t5_{i}"]))
-    record("umt5_features", prompts=len(prompts), min_cosine=worst_cos, max_rel=worst_rel)
-    State.features_ours = lucid.stack([ours[prompts.index(p)] for p in job.prompts]).unsqueeze(0).to("cpu")
+    record(
+        "umt5_features", prompts=len(prompts), min_cosine=worst_cos, max_rel=worst_rel
+    )
+    State.features_ours = (
+        lucid.stack([ours[prompts.index(p)] for p in job.prompts])
+        .unsqueeze(0)
+        .to("cpu")
+    )
     assert worst_cos >= 0.999
 
 
@@ -131,18 +144,30 @@ def test_lora_merge(ref, pipe):
         s_ours = module.weight.to("cpu").double().sum().item()
         s_ref = ref[f"merged.{name}.sum"].item()
         worst_sum = max(worst_sum, abs(s_ours - s_ref) / max(abs(s_ref), 1e-9))
-    record("lora_merge", sampled_values=total, bit_identical=exact, fraction=exact / total, max_rel_sum_error=worst_sum)
+    record(
+        "lora_merge",
+        sampled_values=total,
+        bit_identical=exact,
+        fraction=exact / total,
+        max_rel_sum_error=worst_sum,
+    )
     assert exact / total > 0.999
 
 
 def _run(pipe, job, ref, meta, features, source, taps):
     chunks = int(meta["chunks"])
-    noise = InjectedNoise({k[len("noise.") :]: v for k, v in ref.items() if k.startswith("noise.")})
+    noise = InjectedNoise(
+        {k[len("noise.") :]: v for k, v in ref.items() if k.startswith("noise.")}
+    )
     out = []
-    for chunk in pipe.rollout(job, features.to("metal"), source.to("metal"), noise, taps=taps):
+    for chunk in pipe.rollout(
+        job, features.to("metal"), source.to("metal"), noise, taps=taps
+    ):
         out.append(chunk.latents.to("cpu"))
         if chunk.index == 0:
-            State_kv = {b: tuple(t.to("cpu") for t in pipe.cache.read(b)) for b in (0, 14, 29)}
+            State_kv = {
+                b: tuple(t.to("cpu") for t in pipe.cache.read(b)) for b in (0, 14, 29)
+            }
             taps["kv"] = State_kv
         if chunk.index + 1 == chunks:
             break
@@ -152,19 +177,33 @@ def _run(pipe, job, ref, meta, features, source, taps):
 def test_dit_isolated(ref, meta, job, pipe):
     """The generator alone: upstream's own text features and first-frame latent, upstream's noise."""
     prompts = json.loads(meta["prompts"])
-    features = lucid.stack([ref[f"t5_{prompts.index(p)}"] for p in job.prompts]).unsqueeze(0)
+    features = lucid.stack(
+        [ref[f"t5_{prompts.index(p)}"] for p in job.prompts]
+    ).unsqueeze(0)
     taps = {}
     latents = _run(pipe, job, ref, meta, features, ref["source_prefix"][:, :1], taps)
     blocks = [cosine(taps[f"block_{i}"], ref[f"c0s0.block_{i}"]) for i in range(30)]
-    record("dit_blocks_chunk0_step0", min_cosine=min(blocks), last_block_cosine=blocks[-1], per_block=[round(b, 6) for b in blocks])
+    record(
+        "dit_blocks_chunk0_step0",
+        min_cosine=min(blocks),
+        last_block_cosine=blocks[-1],
+        per_block=[round(b, 6) for b in blocks],
+    )
     kv = {}
     for b in (0, 14, 29):
         k, v = taps["kv"][b]
         kv[f"k_{b}"] = cosine(k.permute(0, 2, 1, 3), ref[f"kv.k_{b}"])
         kv[f"v_{b}"] = cosine(v.permute(0, 2, 1, 3), ref[f"kv.v_{b}"])
     record("kv_cache_after_chunk0", **kv)
-    per_chunk = [cosine(latents[:, 3 * c : 3 * c + 3], ref["latents"][:, 3 * c : 3 * c + 3]) for c in range(latents.shape[1] // 3)]
-    record("latents_dit_isolated", per_chunk_cosine=[round(c, 6) for c in per_chunk], min_cosine=min(per_chunk))
+    per_chunk = [
+        cosine(latents[:, 3 * c : 3 * c + 3], ref["latents"][:, 3 * c : 3 * c + 3])
+        for c in range(latents.shape[1] // 3)
+    ]
+    record(
+        "latents_dit_isolated",
+        per_chunk_cosine=[round(c, 6) for c in per_chunk],
+        min_cosine=min(per_chunk),
+    )
     State.latents_isolated = latents
     assert min(blocks) >= 0.999
     assert min(per_chunk) >= 0.995
@@ -173,8 +212,15 @@ def test_dit_isolated(ref, meta, job, pipe):
 def test_end_to_end(ref, meta, job, pipe):
     """Everything ours — UMT5, VAE encode, generator — only the noise is upstream's."""
     latents = _run(pipe, job, ref, meta, State.features_ours, State.source_ours, {})
-    per_chunk = [cosine(latents[:, 3 * c : 3 * c + 3], ref["latents"][:, 3 * c : 3 * c + 3]) for c in range(latents.shape[1] // 3)]
-    record("latents_end_to_end", per_chunk_cosine=[round(c, 6) for c in per_chunk], min_cosine=min(per_chunk))
+    per_chunk = [
+        cosine(latents[:, 3 * c : 3 * c + 3], ref["latents"][:, 3 * c : 3 * c + 3])
+        for c in range(latents.shape[1] // 3)
+    ]
+    record(
+        "latents_end_to_end",
+        per_chunk_cosine=[round(c, 6) for c in per_chunk],
+        min_cosine=min(per_chunk),
+    )
     State.latents_e2e = latents
     assert min(per_chunk) >= 0.995
 
@@ -188,10 +234,21 @@ def test_decode(ref, pipe):
 
     def to_unit(latents):
         decode.reset()
-        return (decode(latents.to("metal")).float() * 0.5 + 0.5).clamp(0, 1).permute(1, 0, 2, 3).to("cpu")
+        return (
+            (decode(latents.to("metal")).float() * 0.5 + 0.5)
+            .clamp(0, 1)
+            .permute(1, 0, 2, 3)
+            .to("cpu")
+        )
 
     same_latents = psnr(to_unit(ref["latents"]), theirs)
     end_to_end = psnr(to_unit(State.latents_e2e), theirs)
-    record("decode", psnr_same_latents_db=same_latents, psnr_end_to_end_db=end_to_end, frames=int(theirs.shape[0]), vae_dtype=str(vae.dtype))
+    record(
+        "decode",
+        psnr_same_latents_db=same_latents,
+        psnr_end_to_end_db=end_to_end,
+        frames=int(theirs.shape[0]),
+        vae_dtype=str(vae.dtype),
+    )
     assert same_latents >= 35.0
     assert end_to_end >= 35.0

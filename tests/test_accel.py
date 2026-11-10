@@ -12,7 +12,9 @@ def test_compiled_blocks_match_eager():
     model.runner = BlockPrograms(model)
     try:
         compiled = _run(model, job, features, source, None, "metal")
-        again = _run(model, job, features, source, None, "metal")  # second pass: cached executables
+        again = _run(
+            model, job, features, source, None, "metal"
+        )  # second pass: cached executables
     finally:
         model.runner = None
     scale = eager.abs().max().item()

@@ -128,9 +128,13 @@ def pil_resize(image: Tensor, height: int, width: int) -> Tensor:
         return image
     x = image.to(lucid.float64)
     if w != width:  # horizontal pass first, as Pillow does
-        x = _fixed_point_pass(x.permute(0, 2, 1), _pil_coefficients(w, width)).permute(0, 2, 1)
+        x = _fixed_point_pass(x.permute(0, 2, 1), _pil_coefficients(w, width)).permute(
+            0, 2, 1
+        )
     if h != height:
-        x = _fixed_point_pass(x.permute(1, 2, 0), _pil_coefficients(h, height)).permute(2, 0, 1)
+        x = _fixed_point_pass(x.permute(1, 2, 0), _pil_coefficients(h, height)).permute(
+            2, 0, 1
+        )
     return x.to(lucid.int16)
 
 
@@ -150,7 +154,20 @@ def read_video(path: str | Path, max_frames: int, height: int, width: int) -> Te
     path = str(path)
     w, h = _probe_size(path)
     raw = subprocess.run(
-        [_ffmpeg(), "-v", "error", "-i", path, "-frames:v", str(max_frames), "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        [
+            _ffmpeg(),
+            "-v",
+            "error",
+            "-i",
+            path,
+            "-frames:v",
+            str(max_frames),
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgb24",
+            "-",
+        ],
         capture_output=True,
         check=True,
     ).stdout
@@ -248,19 +265,25 @@ def encode_jpeg(frame: bytes, width: int, height: int, quality: int = 4) -> byte
     ).stdout
 
 
-def make_gif(video: str | Path, out: str | Path, width: int = 416, fps: int = 8, colors: int = 96) -> None:
+def make_gif(
+    video: str | Path, out: str | Path, width: int = 416, fps: int = 8, colors: int = 96
+) -> None:
     """A palette GIF of a video (for README media)."""
     flt = f"fps={fps},scale={width}:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors={colors}:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4"  # fmt: skip
     subprocess.run([_ffmpeg(), "-v", "error", "-y", "-i", str(video), "-filter_complex", flt, str(out)], check=True)  # fmt: skip
 
 
-def make_strip(videos: list[str | Path], out: str | Path, frames: list[int], width: int = 208) -> None:
+def make_strip(
+    videos: list[str | Path], out: str | Path, frames: list[int], width: int = 208
+) -> None:
     """A contact sheet: one row per video, one column per frame index (for README media)."""
     select = "+".join(f"eq(n\\,{f})" for f in frames)
     inputs, rows = [], []
     for i, video in enumerate(videos):
         inputs += ["-i", str(video)]
-        rows.append(f"[{i}:v]select='{select}',scale={width}:-1,tile={len(frames)}x1[r{i}]")
+        rows.append(
+            f"[{i}:v]select='{select}',scale={width}:-1,tile={len(frames)}x1[r{i}]"
+        )
     stack = "".join(f"[r{i}]" for i in range(len(videos)))
     graph = ";".join(rows) + (f";{stack}vstack=inputs={len(videos)}[o]" if len(videos) > 1 else ";[r0]copy[o]")  # fmt: skip
     subprocess.run([_ffmpeg(), "-v", "error", "-y", *inputs, "-filter_complex", graph, "-map", "[o]", "-frames:v", "1", "-update", "1", "-q:v", "3", str(out)], check=True)  # fmt: skip
