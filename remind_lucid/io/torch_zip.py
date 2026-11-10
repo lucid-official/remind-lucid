@@ -89,7 +89,8 @@ class _Unpickler(pickle.Unpickler):
         return _Storage(str(key), dtype, itemsize)
 
 
-def read_state_dict(path: Path) -> tuple[zipfile.ZipFile, str, dict[str, TensorRef]]:
+def read_state_dict(path) -> tuple[zipfile.ZipFile, str, dict[str, TensorRef]]:
+    """``path`` is a filesystem path or any seekable binary file (e.g. ``hub.RangeFile``)."""
     archive = zipfile.ZipFile(path)
     pkl = next(n for n in archive.namelist() if n.endswith("/data.pkl"))
     root = pkl[: -len("/data.pkl")]
@@ -101,10 +102,16 @@ def read_state_dict(path: Path) -> tuple[zipfile.ZipFile, str, dict[str, TensorR
     return archive, root, {k: v for k, v in state.items() if isinstance(v, TensorRef)}
 
 
-def to_safetensors(src: Path, dest: Path, rename=lambda name: name) -> None:
-    """Rewrite a ``torch.save`` state dict as a SafeTensors file, byte for byte."""
+def to_safetensors(src, dest: Path, rename=lambda name: name) -> None:
+    """Rewrite a ``torch.save`` state dict as a SafeTensors file, byte for byte.
+
+    Storages are streamed one at a time (each is read once and dropped unless
+    another tensor shares it), so an 11 GB archive needs about one tensor of
+    memory. ``src`` may be a remote :class:`remind_lucid.hub.RangeFile`.
+    """
     archive, root, refs = read_state_dict(src)
     entries, header, offset = [], {}, 0
+    uses: dict[str, int] = collections.Counter(r.storage.key for r in refs.values())
     for name, ref in refs.items():
         if not ref.is_contiguous():
             raise ValueError(f"{name}: non-contiguous tensors are not supported")
@@ -125,17 +132,12 @@ def to_safetensors(src: Path, dest: Path, rename=lambda name: name) -> None:
         fh.write(struct.pack("<Q", len(encoded)))
         fh.write(encoded)
         for ref in entries:
-            blob = cache.get(ref.storage.key)
+            key = ref.storage.key
+            blob = cache.get(key)
             if blob is None:
-                blob = cache[ref.storage.key] = archive.read(
-                    f"{root}/data/{ref.storage.key}"
-                )
+                blob = archive.read(f"{root}/data/{key}")
+                if uses[key] > 1:
+                    cache[key] = blob
             start = ref.offset * ref.storage.itemsize
             fh.write(blob[start : start + ref.numel * ref.storage.itemsize])
     part.replace(dest)
-
-
-def convert_wan_vae(src: Path, dest: Path) -> None:
-    """The Wan2.1 VAE archive as SafeTensors, fp32 as released."""
-    to_safetensors(src, dest)
-    print(f"  wrote {dest}", flush=True)

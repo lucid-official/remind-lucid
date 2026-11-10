@@ -1,4 +1,4 @@
-rdm-lucid
+remind-lucid
 A re-implementation of ReMind on Lucid.
 
 This repository ports, to the Lucid framework, code from the projects below.

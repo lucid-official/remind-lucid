@@ -7,7 +7,7 @@ and on the model zoo (``lucid.models``).
 import ast
 from pathlib import Path
 
-PACKAGE = Path(__file__).resolve().parents[1] / "rdm_lucid"
+PACKAGE = Path(__file__).resolve().parents[1] / "remind_lucid"
 FORBIDDEN_TOP = {
     "torch", "numpy", "np", "scipy", "PIL", "cv2", "einops", "safetensors",
     "transformers", "diffusers", "tokenizers", "yaml", "mlx", "ftfy", "regex",
