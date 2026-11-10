@@ -43,20 +43,21 @@ def test_rollout_calls(device):
     model = _model(ref, device)
     cache = model.new_cache()
     with lucid.no_grad():
-        ctx = model.embed_text(ref["context"][0].to(device))
-        assert max_rel(ctx[0:1], ref["c0_denoise.context"][0]) < 1e-5
+        embedded = model.embed_text(ref["context"][0].to(device))
+        assert max_rel(embedded[0:1], ref["c0_denoise.context"][0]) < 1e-5
+        ctx = [model.text_context(ref["context"][0][i : i + 1].to(device)) for i in range(2)]
         x0, x1 = ref["x0"].to(device), ref["x1"].to(device)
         _, g0 = _geom(model, ref, 0)
         _, g1 = _geom(model, ref, 1)
         _, g_gap = _geom(model, ref, 1, positions=[40, 41, 42])
 
         taps = {}
-        flow = model(x0, [0, 938, 938], ctx[0:1], g0, cache, taps=taps)
+        flow = model(x0, [0, 938, 938], ctx[0], g0, cache, taps=taps)
         for i in range(CFG.num_layers):
             assert max_rel(taps[f"block_{i}"], ref[f"c0_denoise.block_{i}"]) < 1e-4, i
         assert max_rel(flow, ref["c0_denoise.flow"]) < 1e-4
 
-        flow = model(x0, [0, 0, 0], ctx[0:1], g0, cache, write_key=0)
+        flow = model(x0, [0, 0, 0], ctx[0], g0, cache, write_key=0)
         assert max_rel(flow, ref["c0_commit.flow"]) < 1e-4
         for i in range(CFG.num_layers):
             k, v = cache.read(i)
@@ -64,10 +65,10 @@ def test_rollout_calls(device):
             assert max_rel(v.permute(0, 2, 1, 3), ref[f"c0_commit.v_{i}"]) < 1e-4
 
         taps = {}
-        flow = model(x1, [625, 625, 625], ctx[1:2], g1, cache, taps=taps)
+        flow = model(x1, [625, 625, 625], ctx[1], g1, cache, taps=taps)
         for i in range(CFG.num_layers):
             assert max_rel(taps[f"block_{i}"], ref[f"c1_denoise.block_{i}"]) < 1e-4, i
         assert max_rel(flow, ref["c1_denoise.flow"]) < 1e-4
 
-        flow = model(x1, [625, 625, 625], ctx[1:2], g_gap, cache)
+        flow = model(x1, [625, 625, 625], ctx[1], g_gap, cache)
         assert max_rel(flow, ref["c1_gap.flow"]) < 1e-4

@@ -354,15 +354,14 @@ class ReMindPipeline:
             probes.begin(self, job, cache)
         with lucid.no_grad():
             noise0 = noise.initial(shape).to(self.device)
-            contexts: dict[str, Tensor] = {}
+            contexts: dict[str, list] = {}
             for chunk in range(job.num_chunks):
                 t0 = time.time()
                 lo, hi = chunk * cs, (chunk + 1) * cs
                 known = [f < job.seed_latent_frames for f in range(lo, hi)]
                 text = job.prompts[chunk]
                 if text not in contexts:
-                    contexts[text] = model.embed_text(features[0, chunk : chunk + 1])
-                    lucid.eval(contexts[text])
+                    contexts[text] = model.text_context(features[0, chunk : chunk + 1])
                 context = contexts[text]
                 positions = list(range(lo, hi))
                 if probes is not None:

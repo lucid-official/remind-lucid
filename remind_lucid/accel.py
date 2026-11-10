@@ -101,8 +101,8 @@ class _BlockFresh(nn.Module):
         super().__init__()
         self.block = block
 
-    def forward(self, x, e, context, cos, sin, p_t, p_inv_t):
-        return self.block.step(x, e, context, cos, sin, p_t, p_inv_t)
+    def forward(self, x, e, text_k, text_v, cos, sin, p_t, p_inv_t):
+        return self.block.step(x, e, text_k, text_v, cos, sin, p_t, p_inv_t)
 
 
 class _BlockHistory(nn.Module):
@@ -112,8 +112,8 @@ class _BlockHistory(nn.Module):
         super().__init__()
         self.block = block
 
-    def forward(self, x, e, context, cos, sin, p_t, p_inv_t, hist_k, hist_v):
-        return self.block.step(x, e, context, cos, sin, p_t, p_inv_t, hist_k, hist_v)
+    def forward(self, x, e, text_k, text_v, cos, sin, p_t, p_inv_t, hist_k, hist_v):
+        return self.block.step(x, e, text_k, text_v, cos, sin, p_t, p_inv_t, hist_k, hist_v)
 
 
 class BlockPrograms:

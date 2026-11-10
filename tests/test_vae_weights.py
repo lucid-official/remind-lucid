@@ -63,6 +63,9 @@ def test_upstream_encoder_is_causal(ref):
 def test_full_resolution(ref, name):
     dtype = {"fp32": lucid.float32, "bf16": lucid.bfloat16}[name]
     vae = load_vae("metal", dtype)
+    # The fp32 reference builds mean and 1/std in fp32 (upstream builds them in the
+    # dtype of its input); match that here so only the network's arithmetic is compared.
+    vae.scale_dtype = lucid.float32
     with lucid.no_grad():
         image = media.frames_to_model(ref["image_u8"].unsqueeze(0), lucid.bfloat16 if name == "bf16" else lucid.float32).to("metal")  # fmt: skip
         z_image = vae.encode(image).float().permute(0, 2, 1, 3, 4)
@@ -82,7 +85,7 @@ def test_full_resolution(ref, name):
     lucid.metal.empty_cache()
     if name == "fp32":
         # The clip's input is rounded to bf16 on both sides; the image is not (fp32 reference input).
-        assert max_rel(z_video, ref["fp32.video_latent"]) < 2e-3
+        assert max_rel(z_video, ref["fp32.video_latent"]) < 1e-4
         assert psnr(pixels, ref["fp32.pixels"].clamp(-1, 1)) > 60
 
 
@@ -99,6 +102,7 @@ def test_crop_bf16(ref):
     }
     for name, dtype in (("fp32", lucid.float32), ("bf16", lucid.bfloat16)):
         vae = load_vae("metal", dtype)
+        vae.scale_dtype = dtype  # as upstream: the constants in the dtype the VAE runs in
         with lucid.no_grad():
             z = vae.encode(crop).float().permute(0, 2, 1, 3, 4)
             pix = vae.decode(z_ref.to(dtype)).permute(0, 2, 1, 3, 4)

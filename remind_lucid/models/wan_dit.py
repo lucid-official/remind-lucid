@@ -304,11 +304,11 @@ class CrossAttention(nn.Module):
         v = self.v(context).reshape(b, l, n, d).permute(0, 2, 1, 3)
         return k, v
 
-    def forward(self, x: Tensor, context: Tensor) -> Tensor:
+    def forward(self, x: Tensor, k: Tensor, v: Tensor) -> Tensor:
+        """``x``: ``(N, L / N, C)``; ``k`` / ``v``: :meth:`keys_values` of the ``N`` contexts."""
         b, s, _ = x.shape
         n, d = self.num_heads, self.head_dim
         q = self.norm_q(self.q(x)).reshape(b, s, n, d).permute(0, 2, 1, 3)
-        k, v = self.keys_values(context)
         out = F.scaled_dot_product_attention(q, k, v)
         return self.o(out.permute(0, 2, 1, 3).reshape(b, s, n * d))
 
@@ -326,14 +326,16 @@ class AttentionBlock(nn.Module):
         self.ffn = nn.Sequential(LoRALinear(cfg.dim, cfg.ffn_dim), nn.GELU(approximate="tanh"), LoRALinear(cfg.ffn_dim, cfg.dim))  # fmt: skip
         self.modulation = nn.Parameter(lucid.zeros(1, 6, cfg.dim))
 
-    def step(self, x: Tensor, e: Tensor, context: Tensor, cos: Tensor, sin: Tensor, p_t: Tensor, p_inv_t: Tensor, hist_k: Tensor | None = None, hist_v: Tensor | None = None, block: int = -1):  # fmt: skip
+    def step(self, x: Tensor, e: Tensor, text_k: Tensor, text_v: Tensor, cos: Tensor, sin: Tensor, p_t: Tensor, p_inv_t: Tensor, hist_k: Tensor | None = None, hist_v: Tensor | None = None, block: int = -1):  # fmt: skip
         """One block as a pure function of tensors: returns ``(x_out, k, v)``.
 
-        ``x``: ``(B, L, C)``; ``e``: ``(B, F, 6, C)``; ``context``: ``(N, 512,
-        C)``, one per group of ``F / N`` frames; ``hist_k`` / ``hist_v``: the
-        cached history ``(B, heads, L_hist, d)`` or ``None``. ``k`` and ``v``
-        are this chunk's rotated keys and augmented values (what a commit
-        pass caches). This is the unit ``remind_lucid.accel`` compiles.
+        ``x``: ``(B, L, C)``; ``e``: ``(B, F, 6, C)``; ``text_k`` / ``text_v``:
+        this block's cross-attention keys and values of the text contexts,
+        ``(N, heads, 512, d)``, one context per group of ``F / N`` frames;
+        ``hist_k`` / ``hist_v``: the cached history ``(B, heads, L_hist, d)``
+        or ``None``. ``k`` and ``v`` are this chunk's rotated keys and
+        augmented values (what a commit pass caches). This is the unit
+        ``remind_lucid.accel`` compiles.
         """
         b, l, d = x.shape
         f = e.shape[1]
@@ -354,8 +356,8 @@ class AttentionBlock(nn.Module):
         else:
             k_full, v_full = lucid.cat([hist_k, k], dim=2), lucid.cat([hist_v, v], dim=2)
         x = residual(x, attn.attend(q, k_full, v_full, p_t, f, block), mod[2])
-        n = context.shape[0]
-        cross = self.cross_attn(self.norm3(x).reshape(b * n, l // n, d), context)
+        n = text_k.shape[0]
+        cross = self.cross_attn(self.norm3(x).reshape(b * n, l // n, d), text_k, text_v)
         x = x + cross.reshape(b, l, d)
         y = self.ffn(modulate(self.norm2(x), mod[4], mod[3]))
         return residual(x, y, mod[5]), k, v
@@ -487,6 +489,22 @@ class CausalWanModel(nn.Module):
 
     # -- embeddings --------------------------------------------------------- #
 
+    def text_context(self, features: Tensor) -> list[tuple[Tensor, Tensor]]:
+        """Per block, the cross-attention keys and values of raw UMT5 features ``(N, L, 4096)``.
+
+        The reference re-embeds the text and re-projects it to keys and values
+        in every block of every call. They depend on the text alone, so they
+        are computed once per distinct prompt (same operations, same values).
+        """
+        context = self.embed_text(features)
+        out = []
+        for block in self.blocks:
+            k, v = block.cross_attn.keys_values(context)
+            k, v = lucid.contiguous(k), lucid.contiguous(v)
+            lucid.eval(k, v)
+            out.append((k, v))
+        return out
+
     def embed_text(self, context: Tensor) -> Tensor:
         """``text_embedding`` of raw UMT5 features ``(N, L, 4096)``, padded or cut to ``text_len``."""
         n, l, c = context.shape
@@ -520,7 +538,7 @@ class CausalWanModel(nn.Module):
         self,
         x: Tensor,
         timesteps: list[float],
-        context: Tensor,
+        context: list[tuple[Tensor, Tensor]],
         geom: ChunkGeometry,
         cache: KVCache,
         write_key: int | None = None,
@@ -534,9 +552,9 @@ class CausalWanModel(nn.Module):
             ``(1, 48, F, H, W)`` latents of the chunk.
         timesteps : list[float]
             One timestep per frame.
-        context : Tensor
-            ``(N, 512, C)`` *embedded* text contexts (:meth:`embed_text`), one
-            per group of ``F / N`` frames.
+        context : list[tuple[Tensor, Tensor]]
+            :meth:`text_context` of the ``N`` text contexts of this call, one
+            context per group of ``F / N`` frames.
         geom : ChunkGeometry
         cache : KVCache
             Read when ``write_key`` is ``None`` (a denoising step,
@@ -563,7 +581,7 @@ class CausalWanModel(nn.Module):
             # A commit pass attends to the chunk alone and caches its K/V; a
             # denoising step reads the history.
             hist = None if write_key is not None else cache.read(i)
-            args = (tokens, e0, context, geom.cos[i], geom.sin[i], geom.P_t, geom.P_inv_t)
+            args = (tokens, e0, context[i][0], context[i][1], geom.cos[i], geom.sin[i], geom.P_t, geom.P_inv_t)  # fmt: skip
             if runner is not None:
                 tokens, k, v = runner(i, args, hist)
             elif hist is None:
