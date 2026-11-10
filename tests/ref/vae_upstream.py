@@ -3,10 +3,10 @@
     .venv-ref/bin/python tests/ref/vae_upstream.py
 
 Upstream runs its VAE in bf16 (``pipeline.to(dtype=bf16)``). torch's CPU
-bf16 convolutions are about three orders of magnitude slower than fp32 (one
-832x480 frame did not finish encoding in 25 minutes; fp32 takes about a
-second), so the full-resolution reference is fp32 and bf16 is run on a
-64x96 crop — enough to compare bf16 with bf16 and to choose the VAE dtype
+bf16 convolutions are far slower than fp32 (measured here: 40x on a 64x96
+crop, and one 832x480 frame did not finish encoding in 25 minutes where fp32
+takes about a second), so the full-resolution reference is fp32 and bf16 is
+run on the crop — enough to compare bf16 with bf16 and to choose the VAE dtype
 on Metal with numbers. Inputs are the first frame of preset 01 and the
 21-frame prefix of preset 08, prepared exactly as ``remind_inference.py``
 does (PIL / imageio). Writes ``tests/fixtures/vae_upstream_large.safetensors``

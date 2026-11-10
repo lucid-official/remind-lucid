@@ -117,21 +117,29 @@ class _BlockHistory(nn.Module):
 
 
 class BlockPrograms:
-    """One ``lucid.compile`` program per DiT block and call shape.
+    """``lucid.compile`` programs for the first ``blocks`` DiT blocks; the rest stay eager.
 
     The history grows by 1,170 tokens per chunk, so a rollout meets seven
     signatures per block: no history, then 1,170 ... 7,020 cached tokens.
-    ``dynamic=False`` compiles one executable per signature (210 in all, each
-    reused for the four denoising steps of its chunk and by every later
-    video); ``dynamic=True`` asks for one shape-polymorphic executable per
-    block. Install with ``model.runner = BlockPrograms(model)``.
+    Measured on lucid 3.16.4 (``tests/bench/compile_dit.py``,
+    ``compile_memory.py``): a compiled block is not faster than the eager one,
+    and every signature keeps its own executable holding about 0.84 GB for a
+    block whose bf16 weights are 0.37 GB — 210 signatures would need ~175 GB.
+    So this is off by default and, when asked for, compiles only as many
+    blocks as a few GB allow; it exists to keep the compiled path exercised
+    and comparable. Install with ``model.runner = BlockPrograms(model, 2)``.
     """
 
-    def __init__(self, model: nn.Module, dynamic: bool | None = False) -> None:
-        self.fresh = [lucid.compile(_BlockFresh(b).eval(), dynamic=dynamic) for b in model.blocks]  # fmt: skip
-        self.history = [lucid.compile(_BlockHistory(b).eval(), dynamic=dynamic) for b in model.blocks]  # fmt: skip
+    def __init__(self, model: nn.Module, blocks: int | None = None, dynamic: bool | None = False) -> None:  # fmt: skip
+        chosen = list(model.blocks)[: len(model.blocks) if blocks is None else blocks]
+        self.fresh = [lucid.compile(_BlockFresh(b).eval(), dynamic=dynamic) for b in chosen]  # fmt: skip
+        self.history = [lucid.compile(_BlockHistory(b).eval(), dynamic=dynamic) for b in chosen]  # fmt: skip
+        self.model = model
 
     def __call__(self, index: int, args: tuple, hist):
+        if index >= len(self.fresh):
+            block = self.model.blocks[index]
+            return block.step(*args) if hist is None else block.step(*args, hist[0], hist[1])
         if hist is None:
             return self.fresh[index](*args)
         return self.history[index](*args, hist[0], hist[1])

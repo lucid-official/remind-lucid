@@ -259,7 +259,9 @@ class ReMindPipeline:
     dtype
         Generator and text-encoder dtype; the reference offers bf16 (default) and fp16.
     accelerate : bool
-        Use the ``lucid.compile`` programs of :mod:`remind_lucid.accel` where they exist.
+        Run the first two DiT blocks through ``lucid.compile`` programs
+        (:mod:`remind_lucid.accel`). Measured to be no faster than eager and
+        costly in memory; kept so the compiled path stays tested.
     """
 
     def __init__(self, device: str = "metal", dtype=lucid.bfloat16, accelerate: bool = False, log: Callable[[str], None] | None = None) -> None:  # fmt: skip
@@ -297,6 +299,12 @@ class ReMindPipeline:
         if self.generator is None:
             t0 = time.time()
             self.generator = load_generator(self.device, self.dtype, log=self.log)
+            if self.accelerate:
+                from remind_lucid.accel import BlockPrograms
+
+                # Two blocks: 2 x 7 signatures x ~0.84 GB is what the memory budget allows (see accel.py).
+                self.generator.runner = BlockPrograms(self.generator, blocks=2)
+                self.log("lucid.compile: blocks 0-1 compiled (not faster than eager; see README)")
             self.timings.mark("load_generator", t0)
             self.log(f"generator ready, in use {memory_gb():.1f} GB")
         return self.generator

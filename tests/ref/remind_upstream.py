@@ -15,8 +15,9 @@ no flash-attn, so upstream's own SDPA fallback). What else differs from
 * only the frames the known prefix depends on are VAE-encoded (the encoder
   is causal; ``vae_upstream.py`` checks that on the released weights);
 * **the VAE runs in fp32, not bf16.** This one is numerical. torch's CPU
-  bf16 convolutions are ~1000x slower than fp32 (``vae_upstream.py``); a
-  bf16 decode of 21 frames would take days. The VAE's input is still rounded
+  bf16 convolutions are far slower than fp32 (``vae_upstream.py``: 40x on a
+  small crop; a single 832x480 frame did not finish encoding in 25 minutes),
+  which puts a bf16 decode of 21 frames at hours. The VAE's input is still rounded
   to bf16 as upstream does, and its latents are cast to bf16 for the
   generator. bf16-vs-bf16 VAE agreement is measured separately on a crop;
 * ``--chunks N`` rolls out the first N chunks only (later chunks do not
